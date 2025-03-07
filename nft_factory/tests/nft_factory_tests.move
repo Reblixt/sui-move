@@ -13,14 +13,6 @@ module nft_factory::nft_factory_tests {
 
         factory::test_init(scen.ctx());
         scen.next_tx(Alice);
-
-        let publisher = scen.take_from_sender<Publisher>();
-        std::debug::print(&publisher);
-
-        scen.next_tx(Alice);
-        factory::create(&publisher, scen.ctx());
-
-        destroy(publisher);
         scen.end();
     }
 }

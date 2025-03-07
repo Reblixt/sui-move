@@ -12,7 +12,7 @@ version = "1"
 # access_control = { git = "https://github.com/Reblixt/Sui-Access-Control.git", rev = "main" }
 # Kiosk = { git = "https://github.com/MystenLabs/apps.git", subdir = "kiosk", rev = "main" }
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet", override = true }
-access_control = { git = "https://github.com/Reblixt/Sui-Access-Control.git", rev = "testnet" }
+# access_control = { git = "https://github.com/Reblixt/Sui-Access-Control.git", rev = "testnet" }
 Kiosk = { git = "https://github.com/MystenLabs/apps.git", subdir = "kiosk", rev = "testnet" }
 
 # For remote import, use the `{ git = "...", subdir = "...", rev = "..." }`.
