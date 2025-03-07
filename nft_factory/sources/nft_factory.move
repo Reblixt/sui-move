@@ -1,20 +1,17 @@
 module nft_factory::factory {
     use nft::nft::{send_objects, new};
-    use std::{debug, string::utf8};
-    use sui::package::{Self, Publisher};
+    use std::string::utf8;
+    use sui::package;
 
     public struct FACTORY has drop {}
 
-    fun init(otw: FACTORY, ctx: &mut TxContext) {
-        package::claim_and_keep(otw, ctx);
-    }
-
     #[allow(lint(share_owned, self_transfer))]
-    public fun create(publisher: &Publisher, ctx: &mut TxContext) {
+    fun init(otw: FACTORY, ctx: &mut TxContext) {
+        let publisher = package::claim(otw, ctx);
         let (collection_display, nft_display, owner_cap, mut collection, policy, policy_cap) = new<
             FACTORY,
         >(
-            publisher,
+            &publisher,
             utf8(b"Test Collection"),
             utf8(b"https://example.com/image.png"),
             utf8(b"https://example.com/banner.png"),
@@ -26,7 +23,6 @@ module nft_factory::factory {
         );
 
         let mut i = 0;
-        debug::print(&i);
         while (i < 10) {
             let nft = collection.mint_nft(
                 utf8(b"Test NFT"),
@@ -51,7 +47,9 @@ module nft_factory::factory {
             owner_cap,
             ctx,
         );
+        transfer::public_transfer(publisher, ctx.sender());
     }
+
     #[test_only]
     public fun test_init(ctx: &mut TxContext) {
         let otw = FACTORY {};
