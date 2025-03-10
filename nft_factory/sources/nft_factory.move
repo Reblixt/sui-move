@@ -1,54 +1,64 @@
 module nft_factory::factory {
-    use nft::nft::{send_objects, new};
-    use std::{debug, string::utf8};
-    use sui::package::{Self, Publisher};
+    use nft::collectible::{Self, CollectionCap, CollectionTicket, Registry, Collectible};
+    use std::{option::{Self, some}, string::{String, utf8}};
+    use sui::{borrow::Borrow, display::{Self, Display}};
+
+    // use sui::package::{Self, Publisher};
 
     public struct FACTORY has drop {}
 
+    public struct Nft<phantom T> has key, store {
+        id: UID,
+    }
+
     fun init(otw: FACTORY, ctx: &mut TxContext) {
-        package::claim_and_keep(otw, ctx);
+        collectible::claim_ticket<FACTORY, Nft<FACTORY>>(otw, option::some(100), ctx);
     }
 
-    #[allow(lint(share_owned, self_transfer))]
-    public fun create<FACTORY: drop>(publisher: &Publisher, ctx: &mut TxContext) {
-        let (collection_display, nft_display, owner_cap, mut collection, policy, policy_cap) = new(
-            publisher,
-            utf8(b"Test Collection"),
-            utf8(b"https://example.com/image.png"),
-            utf8(b"https://example.com/banner.png"),
-            utf8(b"Test Collection Description"),
-            utf8(b"https://example.com/project"),
-            utf8(b"Creator"),
-            vector[utf8(b"Hat"), utf8(b"Background")],
+    #[allow(lint(self_transfer))]
+    public fun create_and_mint<T: store>(
+        ticket: CollectionTicket<T>,
+        registry: &Registry,
+        name: String,
+        image_url: String,
+        description: String,
+        types: vector<String>,
+        values: vector<String>,
+        creator: String,
+        ctx: &mut TxContext,
+    ) {
+        let mut collection_cap: CollectionCap<T> = ticket.create_collection(
+            registry,
+            false,
+            types,
+            values,
             ctx,
         );
 
-        let mut i = 0;
-        while (i < 10) {
-            let nft = collection.mint_nft(
-                utf8(b"Test NFT"),
-                utf8(b"https://example.com/image.png"),
-                utf8(b"https://example.com/banner.png"),
-                true,
-                vector[utf8(b"Hat"), utf8(b"Background")],
-                vector[utf8(b"Value 1"), utf8(b"Value 2")],
-                &owner_cap,
-                ctx,
-            );
-            transfer::public_transfer(nft, ctx.sender());
-            i = i + 1;
-        };
-
-        collection.share_collection();
-        transfer::public_share_object(policy);
-        send_objects<FACTORY>(
-            policy_cap,
-            collection_display,
-            nft_display,
-            owner_cap,
+        let collectible = collection_cap.mint(
+            image_url,
+            some(name),
+            some(description),
+            some(creator),
+            some(types),
+            some(values),
+            option::none(),
             ctx,
         );
+
+        // let (mut display, borrow): (
+        //     Display<Collectible<T>>,
+        //     Borrow,
+        // ) = collection_cap.borrow_display();
+        //
+        // display::add_multiple(&mut display, types, values);
+        //
+        // collection_cap.return_display(display, borrow);
+
+        transfer::public_transfer(collection_cap, ctx.sender());
+        transfer::public_transfer(collectible, ctx.sender());
     }
+
     #[test_only]
     public fun test_init(ctx: &mut TxContext) {
         let otw = FACTORY {};
