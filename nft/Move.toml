@@ -27,7 +27,7 @@ Kiosk = { git = "https://github.com/MystenLabs/apps.git", subdir = "kiosk", rev 
 # Override = { local = "../conflicting/version", override = true }
 
 [addresses]
-nft = "0x475f93a4c79b63b59b9191019b0c805e66fbdaedd13ac54ebfd3fab3c958e2bc"
+nft = "0x0"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:
 # for example, `std = "0x1"` is exported by the Standard Library.

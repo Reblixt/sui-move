@@ -4,7 +4,7 @@ module nft::nft {
         bag::{Self, Bag},
         display::{Display, new_with_fields},
         event::emit,
-        package::Publisher,
+        package::{Self, Publisher},
         transfer::{public_transfer, share_object, public_share_object},
         transfer_policy::{Self as policy, TransferPolicy, TransferPolicyCap}
     };
@@ -54,87 +54,61 @@ module nft::nft {
     }
 
     // ============= Error Codes =============
-    const ENotOneTimeWitness: u64 = 400;
     const ENotSameLength: u64 = 401;
     const EAttributeNotAllowed: u64 = 402;
     const ENotBurnable: u64 = 403;
 
-    #[allow(lint(self_transfer, share_owned))]
-    public fun default<T: drop>(
-        // otw: T,
-        publisher: &Publisher,
-        name: String,
-        image_url: String,
-        banner_url: String,
-        desc: String,
-        project_url: String,
-        creator: String,
-        attribute_types: vector<String>,
-        ctx: &mut TxContext,
-    ) {
-        let (collection_display, nft_display, owner_cap, collection, policy, policy_cap) = new<T>(
-            // &otw,
-            publisher,
-            name,
-            image_url,
-            banner_url,
-            desc,
-            project_url,
-            creator,
-            attribute_types,
-            ctx,
-        );
-        share_object(collection);
-        public_share_object(policy);
-        public_transfer(policy_cap, ctx.sender());
-        public_transfer(collection_display, ctx.sender());
-        public_transfer(nft_display, ctx.sender());
-        public_transfer(owner_cap, ctx.sender());
-    }
-
-    public fun new<T: drop>(
-        // otw: &T,
-        publisher: &Publisher,
-        name: String,
-        image_url: String,
-        banner_url: String,
-        desc: String,
-        project_url: String,
-        creator: String,
-        attribute_types: vector<String>,
-        ctx: &mut TxContext,
-    ): (
-        Display<Collection<T>>,
-        Display<Nft<T>>,
-        OwnerCap<T>,
-        Collection<T>,
-        TransferPolicy<T>,
-        TransferPolicyCap<T>,
-    ) {
-        // assert!(sui::types::is_one_time_witness(otw), ENotOneTimeWitness);
-
-        let collection = Collection<T> {
+    fun init(otw: NFT, ctx: &mut TxContext) {
+        package::claim_and_keep<NFT>(otw, ctx);
+        let collection = Collection<NFT> {
             id: object::new(ctx),
             nftCount: 0,
             nftIds: vector[],
-            attribute_types,
-            name,
-            image_url,
-            banner_url,
-            description: desc,
-            project_url,
-            creator,
+            attribute_types: vector[],
+            name: utf8(b""),
+            image_url: utf8(b""),
+            banner_url: utf8(b""),
+            description: utf8(b""),
+            project_url: utf8(b""),
+            creator: utf8(b""),
         };
 
-        let owner_cap = OwnerCap<T> { id: object::new(ctx) };
-        let (transfer_policy, policy_cap) = policy::new<T>(publisher, ctx);
+        let owner_cap = OwnerCap<NFT> { id: object::new(ctx) };
 
-        let collection_display = prepare_collection_display<T>(publisher, creator, ctx);
-        let nft_display = prepare_nft_display<T>(publisher, ctx);
+        emit(NewCollectionEvent<NFT> { collection: object::id(&collection) });
 
-        emit(NewCollectionEvent<T> { collection: object::id(&collection) });
+        share_object(collection);
+        transfer::transfer(owner_cap, ctx.sender());
+    }
 
-        (collection_display, nft_display, owner_cap, collection, transfer_policy, policy_cap)
+    #[allow(lint(self_transfer, share_owned))]
+    public fun set_up_collection<T>(
+        collection: &mut Collection<T>,
+        publisher: &Publisher,
+        name: String,
+        image_url: String,
+        banner_url: String,
+        description: String,
+        project_url: String,
+        creator: String,
+        // Optional
+        // royalty_amount: Option<u64>,
+        // royalty_min_amount: Option<u64>,
+        _: &OwnerCap<T>,
+        ctx: &mut TxContext,
+    ) {
+        collection.name = name;
+        collection.image_url = image_url;
+        collection.banner_url = banner_url;
+        collection.description = description;
+        collection.project_url = project_url;
+        collection.creator = creator;
+        let (transfer_policy, policy_cap) = policy::new<NFT>(publisher, ctx);
+
+        let collection_display = prepare_collection_display<NFT>(publisher, creator, ctx);
+        let nft_display = prepare_nft_display<NFT>(publisher, ctx);
+        public_share_object(transfer_policy);
+        send_objects(policy_cap, collection_display, nft_display, ctx);
     }
 
     public fun mint_nft<T>(
@@ -257,22 +231,16 @@ module nft::nft {
         equal
     }
 
-    public fun share_collection<T>(self: Collection<T>) {
-        share_object(self);
-    }
-
     #[allow(lint(self_transfer))]
     public fun send_objects<T>(
         policy_cap: TransferPolicyCap<T>,
         collection_display: Display<Collection<T>>,
         nft_display: Display<Nft<T>>,
-        owner_cap: OwnerCap<T>,
         ctx: &mut TxContext,
     ) {
         public_transfer(policy_cap, ctx.sender());
         public_transfer(collection_display, ctx.sender());
         public_transfer(nft_display, ctx.sender());
-        public_transfer(owner_cap, ctx.sender());
     }
 
     fun prepare_collection_display<T>(

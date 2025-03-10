@@ -2,12 +2,11 @@
 
 [move]
 version = 3
-manifest_digest = "7937B3B8385BE1229573F1D9D45FDFB3B67D3DBE6E36032D60EE031F746570DC"
-deps_digest = "060AD7E57DFB13104F21BE5F5C3759D03F0553FC3229247D9A7A6B45F50D03A3"
+manifest_digest = "785242D5C44F907247BA9186D7CCDE4DDAC05514D04274A557C8C5F48D9BDFD5"
+deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { id = "Kiosk", name = "Kiosk" },
   { id = "Sui", name = "Sui" },
-  { id = "access_control", name = "access_control" },
 ]
 
 [[move.package]]
@@ -30,15 +29,15 @@ dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
 ]
 
-[[move.package]]
-id = "access_control"
-source = { git = "https://github.com/Reblixt/Sui-Access-Control.git", rev = "testnet", subdir = "" }
-
-dependencies = [
-  { id = "Sui", name = "Sui" },
-]
-
 [move.toolchain-version]
 compiler-version = "1.43.1"
 edition = "2024.beta"
 flavor = "sui"
+
+[env]
+
+[env.testnet]
+chain-id = "4c78adac"
+original-published-id = "0x6d2b68b4ae6f194ae5970ec5838070f5e8f5843bd4268386e14e7c625d343b02"
+latest-published-id = "0x6d2b68b4ae6f194ae5970ec5838070f5e8f5843bd4268386e14e7c625d343b02"
+published-version = "1"
