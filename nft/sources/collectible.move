@@ -1,25 +1,34 @@
 // SPDX-License-Identifier: MIT
 
 module nft::collectible {
-    use std::{hash::sha2_256, string::{Self, String}, vector as vec};
+    use std::{hash::sha2_256, option::some, string::{Self, String}, vector as vec};
     use sui::{
         borrow::{Self, Referent, Borrow},
         display::{Self, Display},
+        dynamic_object_field as dyn_field,
         package::{Self, Publisher},
-        transfer_policy::{Self as policy, TransferPolicyCap, TransferPolicy},
-        tx_context::sender
+        transfer_policy::{Self as policy, TransferPolicyCap},
+        tx_context::sender,
+        vec_map::{Self as map, VecMap}
     };
 
+    // ============== Error Codes ==============
+    // Collections errors
     const ENotOneTimeWitness: u64 = 0;
     const ETypeNotFromModule: u64 = 1;
     const ECapReached: u64 = 2;
     const EWrongMetadatasLength: u64 = 3;
     const EWrongCollection: u64 = 4;
-    const ENotBurnable: u64 = 5;
-    const ENotAllCollectiblesBurned: u64 = 6;
+    const ENotDynamic: u64 = 10;
+    // Collectibles errors
+    // const ENotBurnable: u64 = 5;
+    // const ENotAllCollectiblesBurned: u64 = 6;
+    // Attributes errors
     const EDoesNotHaveAttributes: u64 = 7;
-    const ENotSameLength: u64 = 8;
     const EAttributeNotAllowed: u64 = 9;
+    const EAttributeTypeExists: u64 = 11;
+    // General errors
+    const ENotSameLength: u64 = 8;
 
     /// Centralized registry to provide access to system features of
     /// the Collectible.
@@ -68,14 +77,14 @@ module nft::collectible {
         name: Option<String>,
         description: Option<String>,
         creator: Option<String>,
-        attributes: Option<vector<ID>>,
+        attributes: Option<VecMap<String, ID>>,
         meta: Option<T>,
     }
 
     public struct Attribute<phantom T> has key, store {
         id: UID,
         image_url: Option<String>,
-        name: String, // Background, Cloth, etc.
+        key: String, // Background, Cloth, etc.
         value: String, // red-sky, jacket, etc.
     }
 
@@ -183,8 +192,9 @@ module nft::collectible {
         name: Option<String>,
         description: Option<String>,
         creator: Option<String>,
-        attribute_types: Option<vector<String>>,
+        attribute_keys: Option<vector<String>>,
         attribute_values: Option<vector<String>>,
+        attribute_item: Option<Attribute<T>>,
         meta: Option<T>,
         ctx: &mut TxContext,
     ): Collectible<T> {
@@ -196,27 +206,13 @@ module nft::collectible {
         collection.minted = collection.minted + 1;
 
         assert!(
-            option::is_some(&attribute_types)
-            || vec::length(option::borrow(&attribute_types))
+            option::is_some(&attribute_keys)
+            || vec::length(option::borrow(&attribute_keys))
                 == vec::length(option::borrow(&attribute_values)),
             EWrongMetadatasLength,
         );
 
-        // let attributes: vector<Attribute> = if (option::is_some(&attribute_types)) {
-        //     let types = option::destroy_some(attribute_types);
-        //     let values = option::destroy_some(attribute_values);
-        //     vector[
-        //         Attribute {
-        //             id: object::new(ctx),
-        //             a_type: types[0],
-        //             value: values[0],
-        //         },
-        //     ]
-        // } else {
-        //     vector[]
-        // };
-
-        Collectible {
+        let mut item = Collectible {
             id: object::new(ctx),
             image_url,
             name,
@@ -224,10 +220,35 @@ module nft::collectible {
             creator,
             attributes: option::none(),
             meta,
-        }
+        };
+
+        if (attribute_item.is_some()) {
+            let att_item = attribute_item.destroy_some();
+            item.internal_join_attribute<T>(collection, att_item);
+        } else {
+            option::destroy_none(attribute_item);
+        };
+        item
     }
 
-    public fun mint_attribute<T: store>() {}
+    public fun mint_attribute<T: store>(
+        collection: &mut Collection<T>,
+        cap: &CollectionCap<T>,
+        image_url: Option<String>,
+        key: String,
+        value: String,
+        ctx: &mut TxContext,
+    ): Attribute<T> {
+        assert!(cap.collection == object::id(collection), EWrongCollection);
+        assert!(collection.attribute_fields.contains(&key), EAttributeNotAllowed);
+        let attribute = Attribute {
+            id: object::new(ctx),
+            image_url,
+            key,
+            value,
+        };
+        attribute
+    }
 
     // =============== Attribute Functions ============
     // === Validations ===
@@ -253,11 +274,44 @@ module nft::collectible {
         hashed_attribute
     }
 
-    public fun validate_attribute<T: store>() {}
+    public fun validate_attribute<T: key + store>(
+        collectible: &Collectible<T>,
+        hashed_attribute: vector<u8>,
+        keys: vector<String>,
+    ): bool {
+        let mut attribute_hash = vector<u8>[];
 
-    public fun join_attribute<T>() {}
+        let mut i = 0;
+        while (i < vector::length(&keys)) {
+            let attribute: &Attribute<T> = dyn_field::borrow<String, Attribute<T>>(
+                &collectible.id,
+                keys[i],
+            );
+            vector::append(&mut attribute_hash, string::into_bytes(attribute.value));
+            i = i + 1;
+        };
+        sha2_256(attribute_hash) == hashed_attribute
+    }
 
-    public fun split_attribute<T>() {}
+    public fun join_attribute<T: store>(
+        collectible: &mut Collectible<T>,
+        collection: &mut Collection<T>,
+        attribute: Attribute<T>,
+        _: &mut TxContext,
+    ) {
+        assert!(collection.dynamic, ENotDynamic);
+        collectible.internal_join_attribute<T>(collection, attribute);
+    }
+
+    public fun split_attribute<T: store>(
+        collectible: &mut Collectible<T>,
+        collection: &mut Collection<T>,
+        key: String,
+        _: &mut TxContext,
+    ): Attribute<T> {
+        assert!(collection.dynamic, ENotDynamic);
+        collectible.internal_split_attribute<T>(collection, key)
+    }
 
     // ================ Borrowing methods ==================
 
@@ -350,19 +404,13 @@ module nft::collectible {
         collectible: Collectible<T>,
         _: &mut TxContext,
     ): Option<T> {
-        let Collectible<T> { id, meta, attributes, .. } = collectible;
-        if (option::is_some(&attributes)) {
-            let attributes = option::destroy_some(attributes);
-
-            vec::destroy_empty(attributes);
-        } else {
-            option::destroy_none(attributes);
-        };
-
+        let Collectible<T> { id, meta, .. } = collectible;
         id.delete();
         self.burned = self.burned + 1;
         meta
     }
+
+    //TODO: Implement this function
 
     // public fun burn_collection<T: store>(
     //     self: Collection<T>,
@@ -395,9 +443,42 @@ module nft::collectible {
     }
 
     // === Internal ===
-    fun internal_join_attribute<T>() {}
+    fun internal_join_attribute<T: store>(
+        collectible: &mut Collectible<T>,
+        collection: &Collection<T>,
+        attribute: Attribute<T>,
+    ) {
+        assert!(collection.attribute_fields.contains(&attribute.key), EAttributeNotAllowed);
+        assert!(!dyn_field::exists_(&collectible.id, attribute.key), EAttributeTypeExists);
+        if (collectible.attributes.is_some()) {
+            let attribute_map: &mut VecMap<String, ID> = collectible.attributes.borrow_mut();
+            attribute_map.insert(attribute.key, attribute.id.to_inner());
 
-    fun internal_split_attribute<T>() {}
+            dyn_field::add(&mut collectible.id, attribute.key, attribute);
+        } else {
+            let mut new_map = map::empty();
+            new_map.insert(attribute.key, attribute.id.to_inner());
+            collectible.attributes = some(new_map);
+            dyn_field::add(&mut collectible.id, attribute.key, attribute);
+        };
+    }
+
+    fun internal_split_attribute<T: store>(
+        collectible: &mut Collectible<T>,
+        collection: &Collection<T>,
+        key: String,
+    ): Attribute<T> {
+        assert!(collection.attribute_fields.contains(&key), EAttributeNotAllowed);
+        assert!(dyn_field::exists_(&collectible.id, key), EAttributeTypeExists);
+
+        let attribute_map: &mut VecMap<String, ID> = collectible.attributes.borrow_mut();
+        // TODO: Add events
+        let (_key_string, _id_value) = attribute_map.remove(&key);
+
+        let attribute = dyn_field::remove(&mut collectible.id, key);
+
+        attribute
+    }
 
     // fun pop_or_none<T>(opt: &mut Option<vector<T>>): Option<T> {
     //     if (option::is_none(opt)) {
