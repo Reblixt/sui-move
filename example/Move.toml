@@ -1,5 +1,5 @@
 [package]
-name = "nft_factory"
+name = "example"
 edition = "2024.beta" 
 license = "MIT"        
 authors = [
@@ -22,7 +22,7 @@ nft = { local = "../nft"}
 # Override = { local = "../conflicting/version", override = true }
 
 [addresses]
-nft_factory = "0x0"
+example = "0x0"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:
 # for example, `std = "0x1"` is exported by the Standard Library.

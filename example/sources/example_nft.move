@@ -1,4 +1,4 @@
-module nft_factory::factory {
+module example::nft_example {
     use nft::collectible::{Self, CollectionCap, CollectionTicket, Registry, Collectible};
     use std::{option::{Self, some}, string::{String, utf8}};
     use sui::{borrow::Borrow, display::{Self, Display}};

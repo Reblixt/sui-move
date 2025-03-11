@@ -1,7 +1,7 @@
 #[test_only]
-module nft_factory::nft_factory_tests {
+module example::nft_tests {
+    use example::factory::{Self, FACTORY, Nft};
     use nft::collectible::{Self, Registry, CollectionTicket};
-    use nft_factory::factory::{Self, FACTORY, Nft};
     use sui::{package::Publisher, test_scenario, test_utils::destroy};
 
     // const ENotImplemented: u64 = 0;
