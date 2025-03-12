@@ -6,6 +6,7 @@ module nft::collectible {
         borrow::{Self, Referent, Borrow},
         display::{Self, Display},
         dynamic_object_field as dyn_field,
+        event::emit,
         package::{Self, Publisher},
         transfer_policy::{Self as policy, TransferPolicyCap},
         tx_context::sender,
@@ -49,6 +50,7 @@ module nft::collectible {
         max_supply: Option<u32>,
         attribute_fields: vector<String>,
         banner_url: String,
+        creator: Option<String>,
         minted: u32,
         burned: u32,
         // boolean fields
@@ -76,7 +78,6 @@ module nft::collectible {
         image_url: String,
         name: Option<String>,
         description: Option<String>,
-        creator: Option<String>,
         attributes: Option<VecMap<String, ID>>,
         meta: Option<T>,
     }
@@ -92,6 +93,65 @@ module nft::collectible {
     public struct COLLECTIBLE has drop {}
 
     // ===================== Events =====================
+
+    public struct EventTicketClaimed has copy, drop {
+        ticket_id: ID,
+        creator: address,
+    }
+
+    public struct EventCollectionCreated has copy, drop {
+        collection_id: ID,
+        collection_cap_id: ID,
+        max_supply: Option<u32>,
+        creator: address,
+        attributes_fields: vector<String>,
+        banner_url: String,
+        dynamic: bool,
+        burnable: bool,
+    }
+
+    public struct EventCollectibleMinted has copy, drop {
+        collection_id: ID,
+        collectible_id: ID,
+        image_url: String,
+        name: Option<String>,
+        description: Option<String>,
+        attributes: Option<VecMap<String, ID>>,
+    }
+
+    public struct EventAttributeMinted has copy, drop {
+        collection_id: ID,
+        attribute_id: ID,
+        image_url: Option<String>,
+        key: String,
+        value: String,
+    }
+
+    public struct EventAttributeJoined has copy, drop {
+        collectible_id: ID,
+        attribute_id: ID,
+    }
+
+    public struct EventAttributeSplit has copy, drop {
+        collectible_id: ID,
+        attribute_id: ID,
+    }
+
+    public struct EventRevokeOwnership has copy, drop {
+        collection_id: ID,
+        collection_cap_id: ID,
+    }
+
+    public struct EventDestroyCollectible has copy, drop {
+        collection_id: ID,
+        collectible_id: ID,
+    }
+
+    public struct EventEditMade has copy, drop {
+        item_id: ID,
+        edit_name: String,
+        edit_value: String,
+    }
 
     /// Create the centralized Registry of Collectibles to provide access
     /// to the Publisher functionality of the Collectible.
@@ -120,14 +180,18 @@ module nft::collectible {
         let publisher = package::claim(otw, ctx);
 
         assert!(package::from_module<T>(&publisher), ETypeNotFromModule);
-        transfer::transfer(
-            CollectionTicket<T> {
-                id: object::new(ctx),
-                publisher,
-                max_supply,
-            },
-            sender(ctx),
-        );
+        let ticket = CollectionTicket<T> {
+            id: object::new(ctx),
+            publisher,
+            max_supply,
+        };
+
+        emit(EventTicketClaimed {
+            ticket_id: object::id(&ticket),
+            creator: sender(ctx),
+        });
+
+        transfer::transfer(ticket, ctx.sender());
     }
 
     #[allow(lint(share_owned))]
@@ -136,6 +200,7 @@ module nft::collectible {
         registry: &Registry,
         banner_url: String,
         fields: vector<String>,
+        creator: Option<String>,
         dynamic: bool,
         burnable: bool,
         ctx: &mut TxContext,
@@ -167,6 +232,7 @@ module nft::collectible {
             max_supply,
             banner_url,
             attribute_fields: fields,
+            creator,
             minted: 0,
             burned: 0,
             dynamic,
@@ -178,6 +244,17 @@ module nft::collectible {
             id: object::new(ctx),
             collection: object::id(&collection),
         };
+
+        emit(EventCollectionCreated {
+            collection_id: object::id(&collection),
+            collection_cap_id: object::id(&cap),
+            max_supply,
+            creator: sender(ctx),
+            attributes_fields: fields,
+            banner_url,
+            dynamic,
+            burnable,
+        });
         (collection, cap)
     }
 
@@ -191,7 +268,6 @@ module nft::collectible {
         image_url: String,
         name: Option<String>,
         description: Option<String>,
-        creator: Option<String>,
         attribute_keys: Option<vector<String>>,
         attribute_values: Option<vector<String>>,
         attribute_item: Option<Attribute<T>>,
@@ -217,7 +293,6 @@ module nft::collectible {
             image_url,
             name,
             description,
-            creator,
             attributes: option::none(),
             meta,
         };
@@ -228,6 +303,16 @@ module nft::collectible {
         } else {
             option::destroy_none(attribute_item);
         };
+
+        emit(EventCollectibleMinted {
+            collection_id: object::id(collection),
+            collectible_id: object::id(&item),
+            image_url,
+            name,
+            description,
+            attributes: item.attributes,
+        });
+
         item
     }
 
@@ -247,6 +332,14 @@ module nft::collectible {
             key,
             value,
         };
+
+        emit(EventAttributeMinted {
+            collection_id: object::id(collection),
+            attribute_id: object::id(&attribute),
+            image_url,
+            key,
+            value,
+        });
         attribute
     }
 
@@ -313,9 +406,24 @@ module nft::collectible {
         sha2_256(attribute_hash) == hashed_attribute
     }
 
+    // ================ Edit methods ==================
+    public fun edit_banner<T: store>(
+        collection: &mut Collection<T>,
+        cap: &CollectionCap<T>,
+        banner_url: String,
+    ) {
+        assert!(cap.collection == object::id(collection), EWrongCollection);
+        collection.banner_url = banner_url;
+        emit(EventEditMade {
+            item_id: object::id(collection),
+            edit_name: string::utf8(b"banner_url"),
+            edit_value: banner_url,
+        });
+    }
+
     // ================ Borrowing methods ==================
 
-    public fun borrow_policy_cap_collectible<T: store>(
+    public fun borrow_mut_policy_cap_collectible<T: store>(
         self: &mut Collection<T>,
         _: &CollectionCap<T>,
     ): (TransferPolicyCap<Collectible<T>>, Borrow) {
@@ -330,7 +438,7 @@ module nft::collectible {
         borrow::put_back(&mut self.policy_cap_collectible, cap, borrow)
     }
 
-    public fun borrow_policy_cap_attribute<T: store>(
+    public fun borrow_mut_policy_cap_attribute<T: store>(
         self: &mut Collection<T>,
         _: &CollectionCap<T>,
     ): (TransferPolicyCap<Attribute<T>>, Borrow) {
@@ -345,7 +453,7 @@ module nft::collectible {
         borrow::put_back(&mut self.policy_cap_attribute, cap, borrow)
     }
 
-    public fun borrow_display_collectible<T: store>(
+    public fun borrow_mut_display_collectible<T: store>(
         self: &mut Collection<T>,
         _: &CollectionCap<T>,
     ): (Display<Collectible<T>>, Borrow) {
@@ -362,7 +470,7 @@ module nft::collectible {
         borrow::put_back(&mut self.display_collectible, display, borrow)
     }
 
-    public fun borrow_display_attribute<T: store>(
+    public fun borrow_mut_display_attribute<T: store>(
         self: &mut Collection<T>,
         _: &CollectionCap<T>,
     ): (Display<Attribute<T>>, Borrow) {
@@ -380,7 +488,7 @@ module nft::collectible {
     }
 
     /// Take the `Publisher` from the `CollectionCap`.
-    public fun borrow_publisher<T: store>(
+    public fun borrow_mut_publisher<T: store>(
         self: &mut Collection<T>,
         _: &CollectionCap<T>,
     ): (Publisher, Borrow) {
@@ -397,14 +505,22 @@ module nft::collectible {
         borrow::put_back(&mut self.publisher, publisher, borrow)
     }
 
+    public fun borrow_meta<T: store>(collectible: &Collectible<T>): &Option<T> {
+        &collectible.meta
+    }
+
     // === Burn ===
-    public fun burn_collectible<T: store>(
+    public fun destroy_collectible<T: store>(
         self: &mut Collection<T>,
         _: &CollectionCap<T>,
         collectible: Collectible<T>,
         _: &mut TxContext,
     ): Option<T> {
         let Collectible<T> { id, meta, .. } = collectible;
+        emit(EventDestroyCollectible {
+            collection_id: object::id(self),
+            collectible_id: id.to_inner(),
+        });
         id.delete();
         self.burned = self.burned + 1;
         meta
@@ -439,10 +555,77 @@ module nft::collectible {
         assert!(cap.collection == object::id(collection), EWrongCollection);
         collection.owned = false;
         let CollectionCap<T> { id, .. } = cap;
+        emit(EventRevokeOwnership {
+            collection_id: object::id(collection),
+            collection_cap_id: id.to_inner(),
+        });
         id.delete();
     }
 
-    // === Internal ===
+    // ================= View functions ========================
+    // === Collection ===
+    public fun get_max_supply<T: store>(collection: &Collection<T>): Option<u32> {
+        collection.max_supply
+    }
+
+    public fun get_minted<T: store>(collection: &Collection<T>): u32 {
+        collection.minted
+    }
+
+    public fun get_burned<T: store>(collection: &Collection<T>): (bool, u32) {
+        (collection.burnable, collection.burned)
+    }
+
+    public fun get_banner_url<T: store>(collection: &Collection<T>): String {
+        collection.banner_url
+    }
+
+    public fun get_attribute_fields<T: store>(collection: &Collection<T>): vector<String> {
+        collection.attribute_fields
+    }
+
+    public fun get_dynamic<T: store>(collection: &Collection<T>): bool {
+        collection.dynamic
+    }
+
+    // === Collectible ===
+    public fun get_image_url<T: store>(collectible: &Collectible<T>): String {
+        collectible.image_url
+    }
+
+    public fun get_name<T: store>(collectible: &Collectible<T>): String {
+        if (collectible.name.is_some()) {
+            *option::borrow(&collectible.name)
+        } else {
+            string::utf8(b"")
+        }
+    }
+
+    public fun get_description<T: store>(collectible: &Collectible<T>): String {
+        if (collectible.description.is_some()) {
+            *option::borrow(&collectible.description)
+        } else {
+            string::utf8(b"")
+        }
+    }
+
+    public fun get_creator<T: store>(collection: &Collection<T>): String {
+        if (collection.creator.is_some()) {
+            *option::borrow(&collection.creator)
+        } else {
+            string::utf8(b"")
+        }
+    }
+
+    public fun get_attributes<T: store>(collectible: &Collectible<T>): (bool, VecMap<String, ID>) {
+        if (collectible.attributes.is_some()) {
+            (true, *option::borrow(&collectible.attributes))
+        } else {
+            (false, map::empty())
+        }
+    }
+
+    // ================= Internal =======================
     fun internal_join_attribute<T: store>(
         collectible: &mut Collectible<T>,
         collection: &Collection<T>,
@@ -450,6 +633,10 @@ module nft::collectible {
     ) {
         assert!(collection.attribute_fields.contains(&attribute.key), EAttributeNotAllowed);
         assert!(!dyn_field::exists_(&collectible.id, attribute.key), EAttributeTypeExists);
+        emit(EventAttributeJoined {
+            collectible_id: object::id(collectible),
+            attribute_id: attribute.id.to_inner(),
+        });
         if (collectible.attributes.is_some()) {
             let attribute_map: &mut VecMap<String, ID> = collectible.attributes.borrow_mut();
             attribute_map.insert(attribute.key, attribute.id.to_inner());
@@ -472,10 +659,13 @@ module nft::collectible {
         assert!(dyn_field::exists_(&collectible.id, key), EAttributeTypeExists);
 
         let attribute_map: &mut VecMap<String, ID> = collectible.attributes.borrow_mut();
-        // TODO: Add events
         let (_key_string, _id_value) = attribute_map.remove(&key);
 
         let attribute = dyn_field::remove(&mut collectible.id, key);
+        emit(EventAttributeSplit {
+            collectible_id: object::id(collectible),
+            attribute_id: object::id(&attribute),
+        });
 
         attribute
     }
