@@ -253,6 +253,26 @@ module nft::collectible {
     // =============== Attribute Functions ============
     // === Validations ===
 
+    public fun join_attribute<T: store>(
+        collectible: &mut Collectible<T>,
+        collection: &mut Collection<T>,
+        attribute: Attribute<T>,
+        _: &mut TxContext,
+    ) {
+        assert!(collection.dynamic, ENotDynamic);
+        collectible.internal_join_attribute<T>(collection, attribute);
+    }
+
+    public fun split_attribute<T: store>(
+        collectible: &mut Collectible<T>,
+        collection: &mut Collection<T>,
+        key: String,
+        _: &mut TxContext,
+    ): Attribute<T> {
+        assert!(collection.dynamic, ENotDynamic);
+        collectible.internal_split_attribute<T>(collection, key)
+    }
+
     public fun create_attribute_hash<T: store>(
         collection: &Collection<T>,
         keys: vector<String>,
@@ -291,26 +311,6 @@ module nft::collectible {
             i = i + 1;
         };
         sha2_256(attribute_hash) == hashed_attribute
-    }
-
-    public fun join_attribute<T: store>(
-        collectible: &mut Collectible<T>,
-        collection: &mut Collection<T>,
-        attribute: Attribute<T>,
-        _: &mut TxContext,
-    ) {
-        assert!(collection.dynamic, ENotDynamic);
-        collectible.internal_join_attribute<T>(collection, attribute);
-    }
-
-    public fun split_attribute<T: store>(
-        collectible: &mut Collectible<T>,
-        collection: &mut Collection<T>,
-        key: String,
-        _: &mut TxContext,
-    ): Attribute<T> {
-        assert!(collection.dynamic, ENotDynamic);
-        collectible.internal_split_attribute<T>(collection, key)
     }
 
     // ================ Borrowing methods ==================

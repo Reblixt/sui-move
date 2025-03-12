@@ -13,7 +13,7 @@ version = "1"
 # Kiosk = { git = "https://github.com/MystenLabs/apps.git", subdir = "kiosk", rev = "main" }
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet", override = true }
 # access_control = { git = "https://github.com/Reblixt/Sui-Access-Control.git", rev = "testnet" }
-Kiosk = { git = "https://github.com/MystenLabs/apps.git", subdir = "kiosk", rev = "testnet" }
+# Kiosk = { git = "https://github.com/MystenLabs/apps.git", subdir = "kiosk", rev = "testnet" }
 
 # For remote import, use the `{ git = "...", subdir = "...", rev = "..." }`.
 # Revision can be a branch, a tag, and a commit hash.
@@ -27,7 +27,7 @@ Kiosk = { git = "https://github.com/MystenLabs/apps.git", subdir = "kiosk", rev 
 # Override = { local = "../conflicting/version", override = true }
 
 [addresses]
-nft = "0x0"
+nft = "0x8bc39731f5fccced68f3c794c794d499f63a101d4e2df0bfe2340707e3a04904"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:
 # for example, `std = "0x1"` is exported by the Standard Library.
