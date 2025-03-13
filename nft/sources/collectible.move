@@ -18,7 +18,7 @@ module nft::collectible {
     const ENotOneTimeWitness: u64 = 0;
     const ETypeNotFromModule: u64 = 1;
     const ECapReached: u64 = 2;
-    const EWrongMetadatasLength: u64 = 3;
+    const EVectorsNotEmpty: u64 = 3;
     const EWrongCollection: u64 = 4;
     const ENotDynamic: u64 = 10;
     // Collectibles errors
@@ -265,12 +265,10 @@ module nft::collectible {
     public fun mint<T: store>(
         collection: &mut Collection<T>,
         cap: &CollectionCap<T>,
-        image_url: String,
         name: Option<String>,
+        image_url: String,
         description: Option<String>,
-        attribute_keys: Option<vector<String>>,
-        attribute_values: Option<vector<String>>,
-        attribute_item: Option<Attribute<T>>,
+        attribute_item: Option<vector<Attribute<T>>>,
         meta: Option<T>,
         ctx: &mut TxContext,
     ): Collectible<T> {
@@ -280,13 +278,6 @@ module nft::collectible {
             ECapReached,
         );
         collection.minted = collection.minted + 1;
-
-        assert!(
-            option::is_some(&attribute_keys)
-            || vec::length(option::borrow(&attribute_keys))
-                == vec::length(option::borrow(&attribute_values)),
-            EWrongMetadatasLength,
-        );
 
         let mut item = Collectible {
             id: object::new(ctx),
@@ -298,8 +289,15 @@ module nft::collectible {
         };
 
         if (attribute_item.is_some()) {
-            let att_item = attribute_item.destroy_some();
-            item.internal_join_attribute<T>(collection, att_item);
+            let mut i = 0;
+            let mut att_items: vector<Attribute<T>> = attribute_item.destroy_some();
+            while (i < vec::length(&att_items)) {
+                let attribute = vector::remove(&mut att_items, i);
+                item.internal_join_attribute<T>(collection, attribute);
+                i = i + 1;
+            };
+            assert!(vec::length(&att_items) == 0, EVectorsNotEmpty);
+            vec::destroy_empty(att_items);
         } else {
             option::destroy_none(attribute_item);
         };
@@ -584,8 +582,12 @@ module nft::collectible {
         collection.attribute_fields
     }
 
-    public fun get_dynamic<T: store>(collection: &Collection<T>): bool {
+    public fun is_dynamic<T: store>(collection: &Collection<T>): bool {
         collection.dynamic
+    }
+
+    public fun get_collection_id_by_cap<T: store>(cap: &CollectionCap<T>): ID {
+        cap.collection
     }
 
     // === Collectible ===
@@ -617,12 +619,22 @@ module nft::collectible {
         }
     }
 
-    public fun get_attributes<T: store>(collectible: &Collectible<T>): (bool, VecMap<String, ID>) {
+    public fun get_attribute_map<T: store>(
+        collectible: &Collectible<T>,
+    ): (bool, VecMap<String, ID>) {
         if (collectible.attributes.is_some()) {
             (true, *option::borrow(&collectible.attributes))
         } else {
             (false, map::empty())
         }
+    }
+
+    public fun get_attribute_data<T: store>(attribute: &Attribute<T>): (String, String) {
+        (attribute.key, attribute.value)
+    }
+
+    public fun get_attribute_image_url<T: store>(attribute: &Attribute<T>): Option<String> {
+        attribute.image_url
     }
 
     // ================= Internal =======================
