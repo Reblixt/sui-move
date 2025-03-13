@@ -113,6 +113,11 @@ module nft::collectible_test {
         let (has_attribute, map): (bool, VecMap<String, ID>) = collectible.get_attribute_map();
         let keys: vector<String> = map.keys();
         let attribute_value: &ID = map.get(&b"Background".to_string());
+        let meta: &Option<Meta> = collectible.borrow_meta();
+        let meta: &Meta = meta.borrow();
+
+        assert_eq(meta.cool, true);
+        assert_eq(meta.animal, false);
 
         assert!(attribute_id == attribute_value, 0);
 
@@ -128,6 +133,16 @@ module nft::collectible_test {
         destroy(registry);
         scen.end();
     }
+
+    // #[test]
+    // fun test_nft_with_mutiple_attributes() {
+    //     let (mut scen, registry, mut collection, coll_cap) = setup();
+    //     let mut i = 0;
+    //     let mut attributes = vector::empty<Attribute<Meta>>();
+    //     let keys = vector[b"Background".to_string(), b"Hat".to_string(), b"Shoes".to_string()];
+    //     let values = vector[b"red".to_string(), b"fedora".to_string(), b"sneakers".to_string()];
+    //     while (i < 4) {}
+    // }
 
     // ================= Helper functions =================
     fun setup_collection(

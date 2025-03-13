@@ -507,6 +507,13 @@ module nft::collectible {
         &collectible.meta
     }
 
+    public fun borrow_mut_meta<T: store>(
+        collectible: &mut Collectible<T>,
+        _: &CollectionCap<T>,
+    ): &mut Option<T> {
+        &mut collectible.meta
+    }
+
     // === Burn ===
     public fun destroy_collectible<T: store>(
         self: &mut Collection<T>,
