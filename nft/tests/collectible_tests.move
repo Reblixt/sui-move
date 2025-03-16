@@ -26,7 +26,7 @@ module nft::collectible_test {
         animal: bool,
     }
 
-    fun setup(): (Scenario, Registry, Collection<Meta>, CollectionCap<Meta>) {
+    fun setup(dynamic: bool): (Scenario, Registry, Collection<Meta>, CollectionCap<Meta>) {
         let mut scenario = scenario::begin(Alice);
         contract::test_init(scenario.ctx());
         scenario.next_tx(Alice);
@@ -41,14 +41,14 @@ module nft::collectible_test {
 
         let ticket = scenario.take_from_sender<CollectionTicket<Meta>>();
 
-        let (collection, coll_cap) = setup_collection(&mut scenario, &registry, false, ticket);
+        let (collection, coll_cap) = setup_collection(&mut scenario, &registry, dynamic, ticket);
 
         (scenario, registry, collection, coll_cap)
     }
 
     #[test]
     fun test_collection_getter_functions() {
-        let (scen, registry, collection, coll_cap) = setup();
+        let (scen, registry, collection, coll_cap) = setup(false);
 
         let (burnable, burned_amount) = collection.get_burned();
         // bools and numbers
@@ -80,7 +80,7 @@ module nft::collectible_test {
 
     #[test]
     fun test_create_attribute() {
-        let (mut scen, registry, mut collection, coll_cap) = setup();
+        let (mut scen, registry, mut collection, coll_cap) = setup(false);
 
         let attribute = setup_attribute(&mut scen, &mut collection, &coll_cap);
         let image_url = attribute.get_attribute_image_url();
@@ -99,7 +99,7 @@ module nft::collectible_test {
 
     #[test]
     fun test_create_collectible() {
-        let (mut scen, registry, mut collection, coll_cap) = setup();
+        let (mut scen, registry, mut collection, coll_cap) = setup(false);
 
         let attribute = setup_attribute(&mut scen, &mut collection, &coll_cap);
         let attribute_id: ID = object::id(&attribute);
@@ -136,7 +136,7 @@ module nft::collectible_test {
 
     #[test]
     fun test_nft_with_mutiple_attributes() {
-        let (mut scen, registry, mut collection, coll_cap) = setup();
+        let (mut scen, registry, mut collection, coll_cap) = setup(false);
 
         let attributes = setup_multiple_attributes(&mut scen, &mut collection, &coll_cap);
 
@@ -172,6 +172,64 @@ module nft::collectible_test {
         destroy(registry);
         destroy(collection);
         destroy(coll_cap);
+        scen.end();
+    }
+
+    #[test]
+    fun test_swap_attribute() {
+        let (mut scen, registry, mut collection, coll_cap) = setup(true);
+
+        let attributes = setup_multiple_attributes(&mut scen, &mut collection, &coll_cap);
+
+        let mut collectible = collection.mint(
+            &coll_cap,
+            option::some(b"Name".to_string()),
+            b"https://example.com/image".to_string(),
+            option::some(b"Description".to_string()),
+            option::some(attributes),
+            option::none(),
+            scen.ctx(),
+        );
+
+        scen.next_tx(Alice);
+        // create new attribute
+        let new_attribute = collection.mint_attribute(
+            &coll_cap,
+            option::some(b"https://example.com/image".to_string()),
+            b"Background".to_string(),
+            b"Mega blue".to_string(),
+            scen.ctx(),
+        );
+
+        let new_attribute_id = object::id(&new_attribute);
+
+        // swap attributes
+        let old_background = collectible.split_attribute(
+            &mut collection,
+            b"Background".to_string(),
+            scen.ctx(),
+        );
+        let (old_key, old_value) = old_background.get_attribute_data();
+        assert_eq(old_key, b"Background".to_string());
+        assert_eq(old_value, b"red".to_string());
+
+        collectible.join_attribute(&mut collection, new_attribute, scen.ctx());
+
+        let (has_attribute, vecmap_attribute): (
+            bool,
+            VecMap<String, ID>,
+        ) = collectible.get_attribute_map();
+
+        let attribute_value: &ID = vecmap_attribute.get(&b"Background".to_string());
+        assert!(attribute_value == &new_attribute_id, 10);
+
+        assert_eq(has_attribute, true);
+
+        destroy(collectible);
+        destroy(old_background);
+        destroy(registry);
+        destroy(coll_cap);
+        destroy(collection);
         scen.end();
     }
 
