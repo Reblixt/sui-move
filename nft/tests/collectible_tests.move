@@ -137,24 +137,8 @@ module nft::collectible_test {
     #[test]
     fun test_nft_with_mutiple_attributes() {
         let (mut scen, registry, mut collection, coll_cap) = setup();
-        let mut i = 0;
-        let mut attributes: vector<Attribute<Meta>> = vector::empty();
-        let keys = vector[b"Background".to_string(), b"Hat".to_string(), b"Shoes".to_string()];
-        let values = vector[b"red".to_string(), b"fedora".to_string(), b"sneakers".to_string()];
 
-        while (i < vector::length(&keys)) {
-            let new_attribute: Attribute<Meta> = collection.mint_attribute(
-                &coll_cap,
-                option::none(),
-                keys[i],
-                values[i],
-                scen.ctx(),
-            );
-            attributes.push_back(new_attribute);
-            i = i + 1;
-        };
-
-        // std::debug::print(&attributes);
+        let attributes = setup_multiple_attributes(&mut scen, &mut collection, &coll_cap);
 
         let (first_key, first_value) = attributes[0].get_attribute_data();
         let first_image: Option<String> = attributes[1].get_attribute_image_url();
@@ -180,8 +164,6 @@ module nft::collectible_test {
 
         let (keys, values) = vecmap_attributes.into_keys_values();
         assert_eq(keys[0], b"Background".to_string());
-
-        // destroy(attributes);
 
         destroy(keys);
         destroy(values);
@@ -256,5 +238,29 @@ module nft::collectible_test {
         let attribute = collection.mint_attribute(cap, image_url, key, value, scenario.ctx());
 
         attribute
+    }
+
+    fun setup_multiple_attributes(
+        scenario: &mut Scenario,
+        collection: &mut Collection<Meta>,
+        cap: &CollectionCap<Meta>,
+    ): vector<Attribute<Meta>> {
+        let keys = vector[b"Background".to_string(), b"Hat".to_string(), b"Jacket".to_string()];
+        let values = vector[b"red".to_string(), b"blue".to_string(), b"Black leather".to_string()];
+
+        let mut attributes: vector<Attribute<Meta>> = vector[];
+        let mut i = 0;
+        while (i < keys.length()) {
+            let attribute = collection.mint_attribute(
+                cap,
+                option::none(),
+                keys[i],
+                values[i],
+                scenario.ctx(),
+            );
+            attributes.push_back(attribute);
+            i = i +1;
+        };
+        attributes
     }
 }
