@@ -2,6 +2,11 @@
 
 A comprehensive NFT/collectible standard implementation for the Sui blockchain.
 
+## How to Install
+Add this in your Move.toml file under [dependencies]:
+```toml
+nft = { git = "https://github.com/Reblixt/sui-move.git", subdir = "nft", rev = "main" }
+```
 ## Motivation
 
 This contract addresses the lack of a generally agreed NFT/collectible standard in the Sui blockchain ecosystem. It draws inspiration from and credits the Mystenlab team's deprecated collectible contract in their testnet package.
