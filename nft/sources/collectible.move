@@ -289,12 +289,10 @@ module nft::collectible {
         };
 
         if (attribute_item.is_some()) {
-            let mut i = 0;
             let mut att_items: vector<Attribute<T>> = attribute_item.destroy_some();
-            while (i < vec::length(&att_items)) {
-                let attribute = vector::remove(&mut att_items, i);
+            while (!vec::is_empty(&att_items)) {
+                let attribute = vector::remove(&mut att_items, 0);
                 item.internal_join_attribute<T>(collection, attribute);
-                i = i + 1;
             };
             assert!(vec::length(&att_items) == 0, EVectorsNotEmpty);
             vec::destroy_empty(att_items);

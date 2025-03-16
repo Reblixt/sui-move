@@ -134,15 +134,64 @@ module nft::collectible_test {
         scen.end();
     }
 
-    // #[test]
-    // fun test_nft_with_mutiple_attributes() {
-    //     let (mut scen, registry, mut collection, coll_cap) = setup();
-    //     let mut i = 0;
-    //     let mut attributes = vector::empty<Attribute<Meta>>();
-    //     let keys = vector[b"Background".to_string(), b"Hat".to_string(), b"Shoes".to_string()];
-    //     let values = vector[b"red".to_string(), b"fedora".to_string(), b"sneakers".to_string()];
-    //     while (i < 4) {}
-    // }
+    #[test]
+    fun test_nft_with_mutiple_attributes() {
+        let (mut scen, registry, mut collection, coll_cap) = setup();
+        let mut i = 0;
+        let mut attributes: vector<Attribute<Meta>> = vector::empty();
+        let keys = vector[b"Background".to_string(), b"Hat".to_string(), b"Shoes".to_string()];
+        let values = vector[b"red".to_string(), b"fedora".to_string(), b"sneakers".to_string()];
+
+        while (i < vector::length(&keys)) {
+            let new_attribute: Attribute<Meta> = collection.mint_attribute(
+                &coll_cap,
+                option::none(),
+                keys[i],
+                values[i],
+                scen.ctx(),
+            );
+            attributes.push_back(new_attribute);
+            i = i + 1;
+        };
+
+        // std::debug::print(&attributes);
+
+        let (first_key, first_value) = attributes[0].get_attribute_data();
+        let first_image: Option<String> = attributes[1].get_attribute_image_url();
+        assert_eq(first_key, b"Background".to_string());
+        assert_eq(first_value, b"red".to_string());
+        assert_eq(first_image, option::none());
+
+        let collectible = collection.mint(
+            &coll_cap,
+            option::some(b"Name".to_string()),
+            b"https://example.com/image".to_string(),
+            option::some(b"Description".to_string()),
+            option::some(attributes),
+            option::none(),
+            scen.ctx(),
+        );
+
+        let (has_attributes, vecmap_attributes): (
+            bool,
+            VecMap<String, ID>,
+        ) = collectible.get_attribute_map();
+        assert_eq(has_attributes, true);
+
+        let (keys, values) = vecmap_attributes.into_keys_values();
+        assert_eq(keys[0], b"Background".to_string());
+
+        // destroy(attributes);
+
+        destroy(keys);
+        destroy(values);
+        destroy(vecmap_attributes);
+        destroy(collectible);
+        destroy(registry);
+        destroy(collection);
+        destroy(coll_cap);
+        scen.end();
+    }
 
     // ================= Helper functions =================
     fun setup_collection(
