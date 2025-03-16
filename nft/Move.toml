@@ -1,6 +1,6 @@
 [package]
 name = "nft"
-edition = "2024.beta" 
+edition = "2024.beta"
 license = "MIT"
 authors = [
   "Carl Klöfverskjöld (www.github.com/Reblixt)",
@@ -27,8 +27,8 @@ Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-fram
 # Override = { local = "../conflicting/version", override = true }
 
 [addresses]
-nft = "0x066058d10ed6f6f9a2226bdad3ade4dcbf2c04063f7a1ac570e45056767a9bce"
-# Registry = "0xf01cc2c5b8254d32691b68a0f62f516c0c86e321a05ea2d224137d2e358d6775"
+nft = "0x1018d8df359f0e7d104320eac96f6e5daac2c910932d4225e812e26e78c8d46e"
+# Registry = "0x39086e28cb44555d40f3c03dd0dec8a62d14e2446c876fbef206c1b0efcd31db"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:
 # for example, `std = "0x1"` is exported by the Standard Library.
@@ -43,4 +43,3 @@ nft = "0x066058d10ed6f6f9a2226bdad3ade4dcbf2c04063f7a1ac570e45056767a9bce"
 # The dev-addresses section allows overwriting named addresses for the `--test`
 # and `--dev` modes.
 # alice = "0xB0B"
-
