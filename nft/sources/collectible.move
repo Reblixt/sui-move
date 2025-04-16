@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 module nft::collectible {
+    use nft::{attributes::{Self, Attribute}, errors};
     use std::{hash::sha2_256, option::some, string::{Self, String}, vector as vec};
     use sui::{
         borrow::{Self, Referent, Borrow},
@@ -12,24 +13,6 @@ module nft::collectible {
         tx_context::sender,
         vec_map::{Self as map, VecMap}
     };
-
-    // ============== Error Codes ==============
-    // Collections errors
-    const ENotOneTimeWitness: u64 = 0;
-    const ETypeNotFromModule: u64 = 1;
-    const ECapReached: u64 = 2;
-    const EVectorsNotEmpty: u64 = 3;
-    const EWrongCollection: u64 = 4;
-    const ENotDynamic: u64 = 10;
-    // Collectibles errors
-    // const ENotBurnable: u64 = 5;
-    // const ENotAllCollectiblesBurned: u64 = 6;
-    // Attributes errors
-    const EDoesNotHaveAttributes: u64 = 7;
-    const EAttributeNotAllowed: u64 = 9;
-    const EAttributeTypeExists: u64 = 11;
-    // General errors
-    const ENotSameLength: u64 = 8;
 
     /// Centralized registry to provide access to system features of
     /// the Collectible.
@@ -82,24 +65,17 @@ module nft::collectible {
         meta: Option<T>,
     }
 
-    public struct Attribute<phantom T> has key, store {
-        id: UID,
-        image_url: Option<String>,
-        key: String, // Background, Cloth, etc.
-        value: String, // red-sky, jacket, etc.
-    }
-
     /// OTW to initialize the Registry and the base type.
     public struct COLLECTIBLE has drop {}
 
     // ===================== Events =====================
 
-    public struct EventTicketClaimed has copy, drop {
+    public struct TicketClaimed has copy, drop {
         ticket_id: ID,
         creator: address,
     }
 
-    public struct EventCollectionCreated has copy, drop {
+    public struct CollectionCreated has copy, drop {
         collection_id: ID,
         collection_cap_id: ID,
         max_supply: Option<u32>,
@@ -110,7 +86,7 @@ module nft::collectible {
         burnable: bool,
     }
 
-    public struct EventCollectibleMinted has copy, drop {
+    public struct CollectibleMinted has copy, drop {
         collection_id: ID,
         collectible_id: ID,
         image_url: String,
@@ -119,35 +95,17 @@ module nft::collectible {
         attributes: Option<VecMap<String, ID>>,
     }
 
-    public struct EventAttributeMinted has copy, drop {
-        collection_id: ID,
-        attribute_id: ID,
-        image_url: Option<String>,
-        key: String,
-        value: String,
-    }
-
-    public struct EventAttributeJoined has copy, drop {
-        collectible_id: ID,
-        attribute_id: ID,
-    }
-
-    public struct EventAttributeSplit has copy, drop {
-        collectible_id: ID,
-        attribute_id: ID,
-    }
-
-    public struct EventRevokeOwnership has copy, drop {
+    public struct RevokeOwnership has copy, drop {
         collection_id: ID,
         collection_cap_id: ID,
     }
 
-    public struct EventDestroyCollectible has copy, drop {
+    public struct DestroyCollectible has copy, drop {
         collection_id: ID,
         collectible_id: ID,
     }
 
-    public struct EventEditMade has copy, drop {
+    public struct EditMade has copy, drop {
         item_id: ID,
         edit_name: String,
         edit_value: String,
@@ -175,18 +133,18 @@ module nft::collectible {
         max_supply: Option<u32>,
         ctx: &mut TxContext,
     ) {
-        assert!(sui::types::is_one_time_witness(&otw), ENotOneTimeWitness);
+        assert!(sui::types::is_one_time_witness(&otw), errors::notOneTimeWitness!());
 
         let publisher = package::claim(otw, ctx);
 
-        assert!(package::from_module<T>(&publisher), ETypeNotFromModule);
+        assert!(package::from_module<T>(&publisher), errors::typeNotFromModule!());
         let ticket = CollectionTicket<T> {
             id: object::new(ctx),
             publisher,
             max_supply,
         };
 
-        emit(EventTicketClaimed {
+        emit(TicketClaimed {
             ticket_id: object::id(&ticket),
             creator: sender(ctx),
         });
@@ -245,7 +203,7 @@ module nft::collectible {
             collection: object::id(&collection),
         };
 
-        emit(EventCollectionCreated {
+        emit(CollectionCreated {
             collection_id: object::id(&collection),
             collection_cap_id: object::id(&cap),
             max_supply,
@@ -272,10 +230,10 @@ module nft::collectible {
         meta: Option<T>,
         ctx: &mut TxContext,
     ): Collectible<T> {
-        assert!(cap.collection == object::id(collection), EWrongCollection);
+        assert!(cap.collection == object::id(collection), errors::wrongCollection!());
         assert!(
             option::is_none(&collection.max_supply) || *option::borrow(&collection.max_supply) > collection.minted,
-            ECapReached,
+            errors::capReached!(),
         );
         collection.minted = collection.minted + 1;
 
@@ -290,17 +248,18 @@ module nft::collectible {
 
         if (attribute_item.is_some()) {
             let mut att_items: vector<Attribute<T>> = attribute_item.destroy_some();
+
             while (!vec::is_empty(&att_items)) {
                 let attribute = vector::remove(&mut att_items, 0);
                 item.internal_join_attribute<T>(collection, attribute);
             };
-            assert!(vec::length(&att_items) == 0, EVectorsNotEmpty);
+            assert!(vec::length(&att_items) == 0, errors::vectorsNotEmpty!());
             vec::destroy_empty(att_items);
         } else {
             option::destroy_none(attribute_item);
         };
 
-        emit(EventCollectibleMinted {
+        emit(CollectibleMinted {
             collection_id: object::id(collection),
             collectible_id: object::id(&item),
             image_url,
@@ -320,23 +279,9 @@ module nft::collectible {
         value: String,
         ctx: &mut TxContext,
     ): Attribute<T> {
-        assert!(cap.collection == object::id(collection), EWrongCollection);
-        assert!(collection.attribute_fields.contains(&key), EAttributeNotAllowed);
-        let attribute = Attribute {
-            id: object::new(ctx),
-            image_url,
-            key,
-            value,
-        };
-
-        emit(EventAttributeMinted {
-            collection_id: object::id(collection),
-            attribute_id: object::id(&attribute),
-            image_url,
-            key,
-            value,
-        });
-        attribute
+        assert!(cap.collection == object::id(collection), errors::wrongCollection!());
+        assert!(collection.attribute_fields.contains(&key), errors::attributeNotAllowed!());
+        attributes::new(image_url, key, value, collection.id.to_inner(), ctx)
     }
 
     // =============== Attribute Functions ============
@@ -348,7 +293,7 @@ module nft::collectible {
         attribute: Attribute<T>,
         _: &mut TxContext,
     ) {
-        assert!(collection.dynamic, ENotDynamic);
+        assert!(collection.dynamic, errors::notDynamic!());
         collectible.internal_join_attribute<T>(collection, attribute);
     }
 
@@ -358,7 +303,7 @@ module nft::collectible {
         key: String,
         _: &mut TxContext,
     ): Attribute<T> {
-        assert!(collection.dynamic, ENotDynamic);
+        assert!(collection.dynamic, errors::notDynamic!());
         collectible.internal_split_attribute<T>(collection, key)
     }
 
@@ -367,20 +312,17 @@ module nft::collectible {
         keys: vector<String>,
         values: vector<String>,
     ): vector<u8> {
-        assert!(vector::length(&keys) == vector::length(&values), ENotSameLength);
-        assert!(collection.attribute_fields.length() != 0, EDoesNotHaveAttributes);
+        assert!(vector::length(&keys) == vector::length(&values), errors::notSameLength!());
+        assert!(collection.attribute_fields.length() != 0, errors::doesNotHaveAttributes!());
         let types = collection.attribute_fields;
         let mut attribute_hash = vector<u8>[];
 
-        let mut i = 0;
-        while (i < vector::length(&keys)) {
-            assert!(types.contains(&keys[i]), EAttributeNotAllowed);
-            vector::append(&mut attribute_hash, string::into_bytes(values[i]));
-            i = i + 1;
-        };
+        keys.zip_do!(values, |key, value| {
+            assert!(types.contains(&key), errors::attributeNotAllowed!());
+            attribute_hash.append(string::into_bytes(value));
+        });
 
-        let hashed_attribute = sha2_256(attribute_hash);
-        hashed_attribute
+        sha2_256(attribute_hash)
     }
 
     public fun validate_attribute<T: key + store>(
@@ -390,15 +332,11 @@ module nft::collectible {
     ): bool {
         let mut attribute_hash = vector<u8>[];
 
-        let mut i = 0;
-        while (i < vector::length(&keys)) {
-            let attribute: &Attribute<T> = dyn_field::borrow<String, Attribute<T>>(
-                &collectible.id,
-                keys[i],
-            );
-            vector::append(&mut attribute_hash, string::into_bytes(attribute.value));
-            i = i + 1;
-        };
+        keys.do!(|key| {
+            let attribute: &Attribute<T> = dyn_field::borrow(&collectible.id, key);
+            attribute_hash.append(string::into_bytes(attribute.into_value()));
+        });
+
         sha2_256(attribute_hash) == hashed_attribute
     }
 
@@ -408,9 +346,9 @@ module nft::collectible {
         cap: &CollectionCap<T>,
         banner_url: String,
     ) {
-        assert!(cap.collection == object::id(collection), EWrongCollection);
+        assert!(cap.collection == object::id(collection), errors::wrongCollection!());
         collection.banner_url = banner_url;
-        emit(EventEditMade {
+        emit(EditMade {
             item_id: object::id(collection),
             edit_name: string::utf8(b"banner_url"),
             edit_value: banner_url,
@@ -520,7 +458,7 @@ module nft::collectible {
         _: &mut TxContext,
     ): Option<T> {
         let Collectible<T> { id, meta, .. } = collectible;
-        emit(EventDestroyCollectible {
+        emit(DestroyCollectible {
             collection_id: object::id(self),
             collectible_id: id.to_inner(),
         });
@@ -555,10 +493,10 @@ module nft::collectible {
     // }
 
     public fun revoke_ownership<T: store>(cap: CollectionCap<T>, collection: &mut Collection<T>) {
-        assert!(cap.collection == object::id(collection), EWrongCollection);
+        assert!(cap.collection == object::id(collection), errors::wrongCollection!());
         collection.owned = false;
         let CollectionCap<T> { id, .. } = cap;
-        emit(EventRevokeOwnership {
+        emit(RevokeOwnership {
             collection_id: object::id(collection),
             collection_cap_id: id.to_inner(),
         });
@@ -634,36 +572,32 @@ module nft::collectible {
         }
     }
 
-    public fun get_attribute_data<T: store>(attribute: &Attribute<T>): (String, String) {
-        (attribute.key, attribute.value)
-    }
-
-    public fun get_attribute_image_url<T: store>(attribute: &Attribute<T>): Option<String> {
-        attribute.image_url
-    }
-
     // ================= Internal =======================
     fun internal_join_attribute<T: store>(
         collectible: &mut Collectible<T>,
         collection: &Collection<T>,
         attribute: Attribute<T>,
     ) {
-        assert!(collection.attribute_fields.contains(&attribute.key), EAttributeNotAllowed);
-        assert!(!dyn_field::exists_(&collectible.id, attribute.key), EAttributeTypeExists);
-        emit(EventAttributeJoined {
-            collectible_id: object::id(collectible),
-            attribute_id: attribute.id.to_inner(),
-        });
+        assert!(
+            collection.attribute_fields.contains(&attribute.into_key()),
+            errors::attributeNotAllowed!(),
+        );
+        assert!(
+            !dyn_field::exists_(&collectible.id, attribute.into_key()),
+            errors::attributeTypeAlreadyExists!(),
+        );
+        attribute.emit_joined(object::id(collectible));
+
         if (collectible.attributes.is_some()) {
             let attribute_map: &mut VecMap<String, ID> = collectible.attributes.borrow_mut();
-            attribute_map.insert(attribute.key, attribute.id.to_inner());
+            attribute_map.insert(attribute.into_key(), object::id(&attribute));
 
-            dyn_field::add(&mut collectible.id, attribute.key, attribute);
+            dyn_field::add(&mut collectible.id, attribute.into_key(), attribute);
         } else {
             let mut new_map = map::empty();
-            new_map.insert(attribute.key, attribute.id.to_inner());
+            new_map.insert(attribute.into_key(), object::id(&attribute));
             collectible.attributes = some(new_map);
-            dyn_field::add(&mut collectible.id, attribute.key, attribute);
+            dyn_field::add(&mut collectible.id, attribute.into_key(), attribute);
         };
     }
 
@@ -672,17 +606,14 @@ module nft::collectible {
         collection: &Collection<T>,
         key: String,
     ): Attribute<T> {
-        assert!(collection.attribute_fields.contains(&key), EAttributeNotAllowed);
-        assert!(dyn_field::exists_(&collectible.id, key), EAttributeTypeExists);
+        assert!(collection.attribute_fields.contains(&key), errors::attributeNotAllowed!());
+        assert!(dyn_field::exists_(&collectible.id, key), errors::attributeTypeAlreadyExists!());
 
         let attribute_map: &mut VecMap<String, ID> = collectible.attributes.borrow_mut();
         let (_key_string, _id_value) = attribute_map.remove(&key);
 
-        let attribute = dyn_field::remove(&mut collectible.id, key);
-        emit(EventAttributeSplit {
-            collectible_id: object::id(collectible),
-            attribute_id: object::id(&attribute),
-        });
+        let attribute: Attribute<T> = dyn_field::remove(&mut collectible.id, key);
+        attribute.emit_split(object::id(collectible));
 
         attribute
     }

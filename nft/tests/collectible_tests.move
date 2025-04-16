@@ -1,13 +1,15 @@
 #[test_only]
 module nft::collectible_test {
-    use nft::collectible::{
-        Self as contract,
-        Registry,
-        CollectionTicket,
-        Collection,
-        CollectionCap,
-        Collectible,
-        Attribute
+    use nft::{
+        attributes::Attribute,
+        collectible::{
+            Self as contract,
+            Registry,
+            CollectionTicket,
+            Collection,
+            CollectionCap,
+            Collectible
+        }
     };
     use std::{option::some, string::String};
     use sui::{
