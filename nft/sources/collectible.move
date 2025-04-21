@@ -10,7 +10,6 @@ module nft::collectible {
         event::emit,
         package::{Self, Publisher},
         transfer_policy::{Self as policy, TransferPolicyCap},
-        tx_context::sender,
         vec_map::{Self as map, VecMap}
     };
 
@@ -134,6 +133,7 @@ module nft::collectible {
         ctx: &mut TxContext,
     ) {
         assert!(sui::types::is_one_time_witness(&otw), errors::notOneTimeWitness!());
+        let sender = ctx.sender();
 
         let publisher = package::claim(otw, ctx);
 
@@ -146,10 +146,10 @@ module nft::collectible {
 
         emit(TicketClaimed {
             ticket_id: object::id(&ticket),
-            creator: sender(ctx),
+            creator: sender,
         });
 
-        transfer::transfer(ticket, ctx.sender());
+        transfer::transfer(ticket, sender);
     }
 
     #[allow(lint(share_owned))]
@@ -166,7 +166,7 @@ module nft::collectible {
         let CollectionTicket { id, publisher, max_supply } = ticket;
         object::delete(id);
 
-        let display_collectible = display::new<Collectible<T>>(&registry.publisher, ctx);
+        let mut display_collectible = display::new<Collectible<T>>(&registry.publisher, ctx);
         let display_attribute = display::new<Attribute<T>>(&registry.publisher, ctx);
         let (policy_collectible, policy_cap_collectible) = policy::new<Collectible<T>>(
             &registry.publisher,
@@ -176,6 +176,13 @@ module nft::collectible {
             &registry.publisher,
             ctx,
         );
+
+        display_collectible.add(b"name".to_string(), b"{name}".to_string());
+        // display_collectible.a
+        display_collectible.add(b"image_url".to_string(), b"image_url".to_string());
+        display_collectible.add(b"description".to_string(), b"{description}".to_string());
+        display_collectible.add(b"attributes".to_string(), b"{attributes}".to_string());
+        display_collectible.update_version();
 
         transfer::public_share_object(policy_collectible);
         transfer::public_share_object(policy_attribute);
@@ -207,7 +214,7 @@ module nft::collectible {
             collection_id: object::id(&collection),
             collection_cap_id: object::id(&cap),
             max_supply,
-            creator: sender(ctx),
+            creator: ctx.sender(),
             attributes_fields: fields,
             banner_url,
             dynamic,
@@ -226,7 +233,7 @@ module nft::collectible {
         name: Option<String>,
         image_url: String,
         description: Option<String>,
-        attribute_item: Option<vector<Attribute<T>>>,
+        attribute_items: Option<vector<Attribute<T>>>,
         meta: Option<T>,
         ctx: &mut TxContext,
     ): Collectible<T> {
@@ -246,17 +253,11 @@ module nft::collectible {
             meta,
         };
 
-        if (attribute_item.is_some()) {
-            let mut att_items: vector<Attribute<T>> = attribute_item.destroy_some();
-
-            while (!vec::is_empty(&att_items)) {
-                let attribute = vector::remove(&mut att_items, 0);
-                item.internal_join_attribute<T>(collection, attribute);
-            };
-            assert!(vec::length(&att_items) == 0, errors::vectorsNotEmpty!());
-            vec::destroy_empty(att_items);
+        if (attribute_items.is_some()) {
+            let att_items: vector<Attribute<T>> = attribute_items.destroy_some();
+            att_items.do!(|att_item| { item.internal_join_attribute<T>(collection, att_item); });
         } else {
-            option::destroy_none(attribute_item);
+            option::destroy_none(attribute_items);
         };
 
         emit(CollectibleMinted {
@@ -277,11 +278,12 @@ module nft::collectible {
         image_url: Option<String>,
         key: String,
         value: String,
+        meta: Option<T>,
         ctx: &mut TxContext,
     ): Attribute<T> {
         assert!(cap.collection == object::id(collection), errors::wrongCollection!());
         assert!(collection.attribute_fields.contains(&key), errors::attributeNotAllowed!());
-        attributes::new(image_url, key, value, collection.id.to_inner(), ctx)
+        attributes::new(image_url, key, value, collection.id.to_inner(), meta, ctx)
     }
 
     // =============== Attribute Functions ============
@@ -467,31 +469,6 @@ module nft::collectible {
         meta
     }
 
-    //TODO: Implement this function
-
-    // public fun burn_collection<T: store>(
-    //     self: Collection<T>,
-    //     policy: TransferPolicy<Collectible<T>>,
-    //     cap: CollectionCap<T>,
-    //     ctx: &mut TxContext,
-    // ) {
-    //     assert!(self.burnable, ENotBurnable);
-    //     assert!(self.minted == self.burned, ENotAllCollectiblesBurned);
-    //
-    //     let Collection<T> { id, publisher, display, policy_cap, .. } = self;
-    //     let publisher = borrow::destroy(publisher);
-    //     let display: Display<Collectible<T>> = borrow::destroy(display);
-    //     let policy_cap = borrow::destroy(policy_cap);
-    //
-    //     publisher.burn();
-    //     let coin = policy::destroy_and_withdraw(policy, policy_cap, ctx);
-    //     transfer::public_transfer(coin, sender(ctx));
-    //     transfer::public_freeze_object(display);
-    //     id.delete();
-    //     let CollectionCap<T> { id: cap_id, .. } = cap;
-    //     cap_id.delete();
-    // }
-
     public fun revoke_ownership<T: store>(cap: CollectionCap<T>, collection: &mut Collection<T>) {
         assert!(cap.collection == object::id(collection), errors::wrongCollection!());
         collection.owned = false;
@@ -589,6 +566,7 @@ module nft::collectible {
         attribute.emit_joined(object::id(collectible));
 
         if (collectible.attributes.is_some()) {
+            // first update the existing map
             let attribute_map: &mut VecMap<String, ID> = collectible.attributes.borrow_mut();
             attribute_map.insert(attribute.into_key(), object::id(&attribute));
 

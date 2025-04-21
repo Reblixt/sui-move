@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 
 module nft::attributes {
-    use nft::collectible::Collection;
-    use std::string::{Self, String};
+    use std::string::String;
     use sui::event::emit;
 
-    public struct Attribute<phantom T> has key, store {
+    public struct Attribute<T> has key, store {
         id: UID,
         image_url: Option<String>,
         key: String, // Background, Cloth, etc.
         value: String, // red-sky, jacket, etc.
+        meta: Option<T>,
     }
 
     // ============== Events ==============
@@ -36,6 +36,7 @@ module nft::attributes {
         key: String,
         value: String,
         collection: ID,
+        meta: Option<T>,
         ctx: &mut TxContext,
     ): Attribute<T> {
         let attribute = Attribute<T> {
@@ -43,6 +44,7 @@ module nft::attributes {
             image_url,
             key,
             value,
+            meta,
         };
         emit(AttributeMinted {
             collection_id: collection,

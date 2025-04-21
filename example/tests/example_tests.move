@@ -1,6 +1,6 @@
 #[test_only]
 module example::nft_tests {
-    use example::factory::{Self, FACTORY, Nft};
+    use example::nft_example::{Self, NFT_EXAMPLE, Nft};
     use nft::collectible::{Self, Registry, CollectionTicket};
     use sui::{package::Publisher, test_scenario, test_utils::destroy};
 
@@ -17,20 +17,20 @@ module example::nft_tests {
 
         let registry = scen.take_shared<Registry>();
 
-        factory::test_init(scen.ctx());
+        nft_example::test_init(scen.ctx());
         scen.next_tx(Alice);
 
-        let ticket = scen.take_from_address<CollectionTicket<Nft<FACTORY>>>(Alice);
+        let ticket = scen.take_from_address<CollectionTicket<Nft<NFT_EXAMPLE>>>(Alice);
 
-        factory::create_and_mint(
+        nft_example::collection_init(
             ticket,
             &registry,
-            b"name".to_string(),
+            // b"name".to_string(),
             b"image_url".to_string(),
-            b"description".to_string(),
+            // b"description".to_string(),
             vector[b"type".to_string()],
-            vector[b"value".to_string()],
-            b"creator".to_string(),
+            // vector[b"value".to_string()],
+            // b"creator".to_string(),
             scen.ctx(),
         );
 

@@ -11,7 +11,7 @@ module nft::collectible_test {
             Collectible
         }
     };
-    use std::{option::some, string::String};
+    use std::{option::{some, none}, string::String};
     use sui::{
         test_scenario::{Self as scenario, Scenario},
         test_utils::{destroy, assert_eq},
@@ -200,6 +200,7 @@ module nft::collectible_test {
             option::some(b"https://example.com/image".to_string()),
             b"Background".to_string(),
             b"Mega blue".to_string(),
+            none(),
             scen.ctx(),
         );
 
@@ -295,7 +296,14 @@ module nft::collectible_test {
         let key = b"Background".to_string();
         let value = b"red".to_string();
 
-        let attribute = collection.mint_attribute(cap, image_url, key, value, scenario.ctx());
+        let attribute = collection.mint_attribute(
+            cap,
+            image_url,
+            key,
+            value,
+            none(),
+            scenario.ctx(),
+        );
 
         attribute
     }
@@ -316,6 +324,7 @@ module nft::collectible_test {
                 option::none(),
                 keys[i],
                 values[i],
+                none(),
                 scenario.ctx(),
             );
             attributes.push_back(attribute);
