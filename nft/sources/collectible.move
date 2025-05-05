@@ -302,7 +302,15 @@ module nft::collectible {
     ): Attribute<T> {
         assert!(cap.collection == object::id(collection), errors::wrongCollection!());
         assert!(collection.attribute_fields.contains(&key), errors::attributeNotAllowed!());
-        attributes::new(image_url, key, value, collection.id.to_inner(), meta, ctx)
+        attributes::new(
+            image_url,
+            key,
+            value,
+            collection.id.to_inner(),
+            meta,
+            collection.config.meta_borrowable,
+            ctx,
+        )
     }
 
     // =============== Attribute Functions ============
@@ -468,7 +476,7 @@ module nft::collectible {
         collectible: &mut Collectible<T>,
         collection: &Collection<T>,
     ): (T, Meta_borrow) {
-        assert!(collection.config.meta_borrowable, errors::notMetaBorrowable!());
+        assert!(collection.is_meta_borrowable(), errors::notMetaBorrowable!());
         let meta: T = collectible.meta.extract();
         (meta, Meta_borrow { collectible_id: object::id(collectible) })
     }
@@ -539,6 +547,10 @@ module nft::collectible {
 
     public fun get_collection_id_by_cap<T: store>(cap: &CollectionCap<T>): ID {
         cap.collection
+    }
+
+    public fun is_meta_borrowable<T: store>(collection: &Collection<T>): bool {
+        collection.config.meta_borrowable
     }
 
     // === Collectible ===

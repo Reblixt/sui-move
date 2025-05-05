@@ -10,6 +10,11 @@ module nft::attributes {
         key: String, // Background, Cloth, etc.
         value: String, // red-sky, jacket, etc.
         meta: Option<T>,
+        meta_borrowable: bool,
+    }
+
+    public struct Meta_borrow {
+        attribute_id: ID,
     }
 
     // ============== Events ==============
@@ -31,12 +36,23 @@ module nft::attributes {
         attribute_id: ID,
     }
 
+    public fun borrow_meta<T: store>(self: &mut Attribute<T>): (T, Meta_borrow) {
+        (self.meta.extract(), Meta_borrow { attribute_id: self.id.to_inner() })
+    }
+
+    public fun return_meta<T: store>(self: &mut Attribute<T>, meta: T, _meta_borrow: Meta_borrow) {
+        let Meta_borrow { attribute_id } = _meta_borrow;
+        assert!(self.id.to_inner() == attribute_id, 0);
+        self.meta.fill(meta);
+    }
+
     public(package) fun new<T: store>(
         image_url: Option<String>,
         key: String,
         value: String,
         collection: ID,
         meta: Option<T>,
+        meta_borrowable: bool,
         ctx: &mut TxContext,
     ): Attribute<T> {
         let attribute = Attribute<T> {
@@ -45,6 +61,7 @@ module nft::attributes {
             key,
             value,
             meta,
+            meta_borrowable,
         };
         emit(AttributeMinted {
             collection_id: collection,
