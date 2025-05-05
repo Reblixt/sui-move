@@ -2,7 +2,7 @@
 
 module nft::collectible {
     use nft::{attributes::{Self, Attribute}, errors};
-    use std::{hash::sha2_256, option::some, string::{Self, String}, vector as vec};
+    use std::{hash::sha2_256, string::{Self, String}};
     use sui::{
         borrow::{Self, Referent, Borrow},
         display::{Self, Display},
@@ -20,6 +20,27 @@ module nft::collectible {
         publisher: Publisher,
     }
 
+    public struct Meta_borrow {
+        collectible_id: ID,
+    }
+
+    public struct Config has copy, store {
+        // Max mintable collectibles
+        max_supply: Option<u32>,
+        // How many collectibles have been minted
+        minted: u32,
+        // How many collectibles have been burned
+        burned: u32,
+        // If the collection is owned by the creator
+        owned: bool,
+        // If the collection is burnable
+        burnable: bool,
+        // If the collection is dynamic and attributes can be equipped or unequipped
+        dynamic: bool,
+        // If the meta is borrowable, if true consider the risks of it and its usecase
+        meta_borrowable: bool,
+    }
+
     public struct Collection<T: store> has key, store {
         id: UID,
         // Stored objects
@@ -29,19 +50,10 @@ module nft::collectible {
         policy_cap_collectible: Referent<TransferPolicyCap<Collectible<T>>>,
         policy_cap_attribute: Referent<TransferPolicyCap<Attribute<T>>>,
         // Data fields
-        max_supply: Option<u32>,
         attribute_fields: vector<String>,
         banner_url: String,
         creator: Option<String>,
-        minted: u32,
-        burned: u32,
-        // boolean fields
-        // If true a CollectionCap exists and is not immutable
-        owned: bool,
-        // allows to burn collectibles
-        burnable: bool,
-        // allowes to use join_attribute and split_attribute functions
-        dynamic: bool,
+        config: Config,
     }
 
     public struct CollectionCap<phantom T: store> has key, store {
@@ -58,9 +70,9 @@ module nft::collectible {
     public struct Collectible<T: store> has key, store {
         id: UID,
         image_url: String,
-        name: Option<String>,
-        description: Option<String>,
-        attributes: Option<VecMap<String, ID>>,
+        name: String,
+        description: String,
+        attributes: VecMap<String, ID>,
         meta: Option<T>,
     }
 
@@ -91,7 +103,7 @@ module nft::collectible {
         image_url: String,
         name: Option<String>,
         description: Option<String>,
-        attributes: Option<VecMap<String, ID>>,
+        attributes: VecMap<String, ID>,
     }
 
     public struct RevokeOwnership has copy, drop {
@@ -161,6 +173,7 @@ module nft::collectible {
         creator: Option<String>,
         dynamic: bool,
         burnable: bool,
+        meta_borrowable: bool,
         ctx: &mut TxContext,
     ): (Collection<T>, CollectionCap<T>) {
         let CollectionTicket { id, publisher, max_supply } = ticket;
@@ -178,7 +191,6 @@ module nft::collectible {
         );
 
         display_collectible.add(b"name".to_string(), b"{name}".to_string());
-        // display_collectible.a
         display_collectible.add(b"image_url".to_string(), b"image_url".to_string());
         display_collectible.add(b"description".to_string(), b"{description}".to_string());
         display_collectible.add(b"attributes".to_string(), b"{attributes}".to_string());
@@ -187,6 +199,16 @@ module nft::collectible {
         transfer::public_share_object(policy_collectible);
         transfer::public_share_object(policy_attribute);
 
+        let config = Config {
+            max_supply,
+            minted: 0,
+            burned: 0,
+            owned: true,
+            burnable,
+            dynamic,
+            meta_borrowable,
+        };
+
         let collection = Collection<T> {
             id: object::new(ctx),
             display_collectible: borrow::new(display_collectible, ctx),
@@ -194,15 +216,10 @@ module nft::collectible {
             policy_cap_collectible: borrow::new(policy_cap_collectible, ctx),
             policy_cap_attribute: borrow::new(policy_cap_attribute, ctx),
             publisher: borrow::new(publisher, ctx),
-            max_supply,
             banner_url,
             attribute_fields: fields,
             creator,
-            minted: 0,
-            burned: 0,
-            dynamic,
-            burnable,
-            owned: true,
+            config,
         };
 
         let cap = CollectionCap<T> {
@@ -239,21 +256,23 @@ module nft::collectible {
     ): Collectible<T> {
         assert!(cap.collection == object::id(collection), errors::wrongCollection!());
         assert!(
-            option::is_none(&collection.max_supply) || *option::borrow(&collection.max_supply) > collection.minted,
+            option::is_none(&collection.config.max_supply) || *option::borrow(&collection.config.max_supply) > collection.config.minted,
             errors::capReached!(),
         );
-        collection.minted = collection.minted + 1;
+        collection.config.minted = collection.config.minted + 1;
+        let empty_string = string::utf8(b"");
 
         let mut item = Collectible {
             id: object::new(ctx),
             image_url,
-            name,
-            description,
-            attributes: option::none(),
+            name: name.destroy_with_default<String>(empty_string),
+            description: description.destroy_with_default<String>(empty_string),
+            attributes: map::empty<String, ID>(),
             meta,
         };
 
         if (attribute_items.is_some()) {
+            // std::debug::print(&item);
             let att_items: vector<Attribute<T>> = attribute_items.destroy_some();
             att_items.do!(|att_item| { item.internal_join_attribute<T>(collection, att_item); });
         } else {
@@ -295,7 +314,7 @@ module nft::collectible {
         attribute: Attribute<T>,
         _: &mut TxContext,
     ) {
-        assert!(collection.dynamic, errors::notDynamic!());
+        assert!(collection.config.dynamic, errors::notDynamic!());
         collectible.internal_join_attribute<T>(collection, attribute);
     }
 
@@ -305,7 +324,7 @@ module nft::collectible {
         key: String,
         _: &mut TxContext,
     ): Attribute<T> {
-        assert!(collection.dynamic, errors::notDynamic!());
+        assert!(collection.config.dynamic, errors::notDynamic!());
         collectible.internal_split_attribute<T>(collection, key)
     }
 
@@ -447,9 +466,21 @@ module nft::collectible {
 
     public fun borrow_mut_meta<T: store>(
         collectible: &mut Collectible<T>,
-        _: &CollectionCap<T>,
-    ): &mut Option<T> {
-        &mut collectible.meta
+        collection: &Collection<T>,
+    ): (T, Meta_borrow) {
+        assert!(collection.config.meta_borrowable, errors::notMetaBorrowable!());
+        let meta: T = collectible.meta.extract();
+        (meta, Meta_borrow { collectible_id: object::id(collectible) })
+    }
+
+    public fun return_meta<T: store>(
+        collectible: &mut Collectible<T>,
+        meta: T,
+        borrow: Meta_borrow,
+    ) {
+        let Meta_borrow { collectible_id } = borrow;
+        assert!(collectible_id == object::id(collectible), errors::wrongCollectible!());
+        collectible.meta.fill(meta);
     }
 
     // === Burn ===
@@ -465,13 +496,13 @@ module nft::collectible {
             collectible_id: id.to_inner(),
         });
         id.delete();
-        self.burned = self.burned + 1;
+        self.config.burned = self.config.burned + 1;
         meta
     }
 
     public fun revoke_ownership<T: store>(cap: CollectionCap<T>, collection: &mut Collection<T>) {
         assert!(cap.collection == object::id(collection), errors::wrongCollection!());
-        collection.owned = false;
+        collection.config.owned = false;
         let CollectionCap<T> { id, .. } = cap;
         emit(RevokeOwnership {
             collection_id: object::id(collection),
@@ -483,15 +514,15 @@ module nft::collectible {
     // ================= View functions ========================
     // === Collection ===
     public fun get_max_supply<T: store>(collection: &Collection<T>): Option<u32> {
-        collection.max_supply
+        collection.config.max_supply
     }
 
     public fun get_minted<T: store>(collection: &Collection<T>): u32 {
-        collection.minted
+        collection.config.minted
     }
 
     public fun get_burned<T: store>(collection: &Collection<T>): (bool, u32) {
-        (collection.burnable, collection.burned)
+        (collection.config.burnable, collection.config.burned)
     }
 
     public fun get_banner_url<T: store>(collection: &Collection<T>): String {
@@ -503,7 +534,7 @@ module nft::collectible {
     }
 
     public fun is_dynamic<T: store>(collection: &Collection<T>): bool {
-        collection.dynamic
+        collection.config.dynamic
     }
 
     public fun get_collection_id_by_cap<T: store>(cap: &CollectionCap<T>): ID {
@@ -516,19 +547,11 @@ module nft::collectible {
     }
 
     public fun get_name<T: store>(collectible: &Collectible<T>): String {
-        if (collectible.name.is_some()) {
-            *option::borrow(&collectible.name)
-        } else {
-            string::utf8(b"")
-        }
+        collectible.name
     }
 
     public fun get_description<T: store>(collectible: &Collectible<T>): String {
-        if (collectible.description.is_some()) {
-            *option::borrow(&collectible.description)
-        } else {
-            string::utf8(b"")
-        }
+        collectible.description
     }
 
     public fun get_creator<T: store>(collection: &Collection<T>): String {
@@ -539,14 +562,8 @@ module nft::collectible {
         }
     }
 
-    public fun get_attribute_map<T: store>(
-        collectible: &Collectible<T>,
-    ): (bool, VecMap<String, ID>) {
-        if (collectible.attributes.is_some()) {
-            (true, *option::borrow(&collectible.attributes))
-        } else {
-            (false, map::empty())
-        }
+    public fun get_attribute_map<T: store>(collectible: &Collectible<T>): VecMap<String, ID> {
+        collectible.attributes
     }
 
     // ================= Internal =======================
@@ -565,18 +582,11 @@ module nft::collectible {
         );
         attribute.emit_joined(object::id(collectible));
 
-        if (collectible.attributes.is_some()) {
-            // first update the existing map
-            let attribute_map: &mut VecMap<String, ID> = collectible.attributes.borrow_mut();
-            attribute_map.insert(attribute.into_key(), object::id(&attribute));
+        let mut attribute_map: VecMap<String, ID> = collectible.attributes;
+        attribute_map.insert(attribute.into_key(), object::id(&attribute));
 
-            dyn_field::add(&mut collectible.id, attribute.into_key(), attribute);
-        } else {
-            let mut new_map = map::empty();
-            new_map.insert(attribute.into_key(), object::id(&attribute));
-            collectible.attributes = some(new_map);
-            dyn_field::add(&mut collectible.id, attribute.into_key(), attribute);
-        };
+        collectible.attributes = attribute_map;
+        dyn_field::add(&mut collectible.id, attribute.into_key(), attribute);
     }
 
     fun internal_split_attribute<T: store>(
@@ -587,22 +597,15 @@ module nft::collectible {
         assert!(collection.attribute_fields.contains(&key), errors::attributeNotAllowed!());
         assert!(dyn_field::exists_(&collectible.id, key), errors::attributeTypeAlreadyExists!());
 
-        let attribute_map: &mut VecMap<String, ID> = collectible.attributes.borrow_mut();
+        let mut attribute_map: VecMap<String, ID> = collectible.attributes;
         let (_key_string, _id_value) = attribute_map.remove(&key);
 
+        collectible.attributes = attribute_map;
         let attribute: Attribute<T> = dyn_field::remove(&mut collectible.id, key);
         attribute.emit_split(object::id(collectible));
 
         attribute
     }
-
-    // fun pop_or_none<T>(opt: &mut Option<vector<T>>): Option<T> {
-    //     if (option::is_none(opt)) {
-    //         option::none()
-    //     } else {
-    //         option::some(vec::pop_back(option::borrow_mut(opt)))
-    //     }
-    // }
 
     #[test_only]
     public fun test_init(ctx: &mut TxContext) {

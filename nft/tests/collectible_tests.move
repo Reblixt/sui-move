@@ -104,6 +104,7 @@ module nft::collectible_test {
         let (mut scen, registry, mut collection, coll_cap) = setup(false);
 
         let attribute = setup_attribute(&mut scen, &mut collection, &coll_cap);
+        // std::debug::print(&attribute);
         let attribute_id: ID = object::id(&attribute);
         let collectible = setup_static_collectible(
             &mut scen,
@@ -111,10 +112,14 @@ module nft::collectible_test {
             some(vector[attribute]),
             &coll_cap,
         );
+        // std::debug::print(&collectible);
 
-        let (has_attribute, map): (bool, VecMap<String, ID>) = collectible.get_attribute_map();
+        let map: VecMap<String, ID> = collectible.get_attribute_map();
+        // std::debug::print(&map);
         let keys: vector<String> = map.keys();
+        // std::debug::print(&keys);
         let attribute_value: &ID = map.get(&b"Background".to_string());
+        // std::debug::print(&b"After mint in create collectible test".to_string());
         let meta: &Option<Meta> = collectible.borrow_meta();
         let meta: &Meta = meta.borrow();
 
@@ -123,7 +128,6 @@ module nft::collectible_test {
 
         assert!(attribute_id == attribute_value, 0);
 
-        assert_eq(has_attribute, true);
         assert_eq(keys.contains(&b"Background".to_string()), true);
         assert_eq(collectible.get_name(), b"Name".to_string());
         assert_eq(collectible.get_image_url(), b"https://example.com/image".to_string());
@@ -158,11 +162,7 @@ module nft::collectible_test {
             scen.ctx(),
         );
 
-        let (has_attributes, vecmap_attributes): (
-            bool,
-            VecMap<String, ID>,
-        ) = collectible.get_attribute_map();
-        assert_eq(has_attributes, true);
+        let vecmap_attributes: VecMap<String, ID> = collectible.get_attribute_map();
 
         let (keys, values) = vecmap_attributes.into_keys_values();
         assert_eq(keys[0], b"Background".to_string());
@@ -218,15 +218,10 @@ module nft::collectible_test {
 
         collectible.join_attribute(&mut collection, new_attribute, scen.ctx());
 
-        let (has_attribute, vecmap_attribute): (
-            bool,
-            VecMap<String, ID>,
-        ) = collectible.get_attribute_map();
+        let vecmap_attribute: VecMap<String, ID> = collectible.get_attribute_map();
 
         let attribute_value: &ID = vecmap_attribute.get(&b"Background".to_string());
         assert!(attribute_value == &new_attribute_id, 10);
-
-        assert_eq(has_attribute, true);
 
         destroy(collectible);
         destroy(old_background);
@@ -258,6 +253,7 @@ module nft::collectible_test {
             option::some(b"Alice".to_string()),
             dynamic,
             true,
+            true,
             scenario.ctx(),
         );
 
@@ -274,7 +270,7 @@ module nft::collectible_test {
         let description = b"Description".to_string();
         let image_url = b"https://example.com/image".to_string();
         let meta = Meta { id: object::new(scenario.ctx()), cool: true, animal: false };
-
+        // std::debug::print(&attribute);
         let nft = collection.mint(
             cap,
             some(name),
@@ -284,6 +280,7 @@ module nft::collectible_test {
             some(meta),
             scenario.ctx(),
         );
+        // std::debug::print(&b"after mint".to_string());
         nft
     }
 

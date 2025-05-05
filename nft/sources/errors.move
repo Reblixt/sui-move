@@ -20,6 +20,10 @@ module nft::errors {
     const ENotSameLength: u64 = 9;
     #[test_only]
     const ENotOneTimeWitness: u64 = 10;
+    #[test_only]
+    const ENotMetaBorrowable: u64 = 11;
+    #[test_only]
+    const EWrongCollectible: u64 = 12;
 
     public(package) macro fun typeNotFromModule(): u64 {
         1
@@ -51,5 +55,11 @@ module nft::errors {
     }
     public(package) macro fun notOneTimeWitness(): u64 {
         10
+    }
+    public(package) macro fun notMetaBorrowable(): u64 {
+        11
+    }
+    public(package) macro fun wrongCollectible(): u64 {
+        12
     }
 }
