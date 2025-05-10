@@ -180,6 +180,7 @@ module nft::collectible {
         display_collectible.add(b"image_url".to_string(), b"image_url".to_string());
         display_collectible.add(b"description".to_string(), b"{description}".to_string());
         display_collectible.add(b"attributes".to_string(), b"{attributes}".to_string());
+        display_collectible.add(b"equipped".to_string(), b"{equipped}".to_string());
         display_collectible.update_version();
 
         transfer::public_share_object(policy_collectible);
@@ -240,7 +241,7 @@ module nft::collectible {
         meta: Option<T>,
         ctx: &mut TxContext,
     ): Collectible<T> {
-        assert!(cap.collection == object::id(collection), errors::wrongCollection!());
+        cap.assert_correct_collection(collection.id.to_inner());
         assert!(
             option::is_none(&collection.config.max_supply) || *option::borrow(&collection.config.max_supply) > collection.config.minted,
             errors::capReached!(),
@@ -259,7 +260,6 @@ module nft::collectible {
         };
 
         if (attribute_items.is_some()) {
-            // std::debug::print(&item);
             let att_items: vector<Attribute<T>> = attribute_items.destroy_some();
             att_items.do!(|att_item| { item.internal_join_attribute<T>(collection, att_item); });
         } else {
@@ -288,8 +288,9 @@ module nft::collectible {
         meta: Option<T>,
         ctx: &mut TxContext,
     ): Attribute<T> {
-        assert!(cap.collection == object::id(collection), errors::wrongCollection!());
-        assert!(collection.attribute_fields.contains(&key), errors::attributeNotAllowed!());
+        cap.assert_correct_collection(collection.id.to_inner());
+        collection.assert_attribute_check(&key);
+
         attributes::new(
             image_url,
             key,
@@ -310,7 +311,7 @@ module nft::collectible {
         attribute: Attribute<T>,
         _: &mut TxContext,
     ) {
-        assert!(collection.config.dynamic, errors::notDynamic!());
+        collection.assert_dynamic();
         collectible.internal_join_attribute<T>(collection, attribute);
     }
 
@@ -320,7 +321,7 @@ module nft::collectible {
         key: String,
         _: &mut TxContext,
     ): Attribute<T> {
-        assert!(collection.config.dynamic, errors::notDynamic!());
+        collection.assert_dynamic();
         collectible.internal_split_attribute<T>(collection, key)
     }
 
@@ -329,7 +330,7 @@ module nft::collectible {
         keys: vector<String>,
         values: vector<String>,
     ): vector<u8> {
-        assert!(vector::length(&keys) == vector::length(&values), errors::notSameLength!());
+        assert!(&keys.length() == &values.length(), errors::notSameLength!());
         assert!(collection.attribute_fields.length() != 0, errors::doesNotHaveAttributes!());
         let types = collection.attribute_fields;
         let mut attribute_hash = vector<u8>[];
@@ -363,7 +364,8 @@ module nft::collectible {
         cap: &CollectionCap<T>,
         banner_url: String,
     ) {
-        assert!(cap.collection == object::id(collection), errors::wrongCollection!());
+        cap.assert_correct_collection(collection.id.to_inner());
+
         collection.banner_url = banner_url;
         emit(EditMade {
             item_id: object::id(collection),
@@ -484,7 +486,6 @@ module nft::collectible {
         self: &mut Collection<T>,
         _: &CollectionCap<T>,
         collectible: Collectible<T>,
-        _: &mut TxContext,
     ): Option<T> {
         let Collectible<T> { id, meta, .. } = collectible;
         emit(DestroyCollectible {
@@ -498,7 +499,8 @@ module nft::collectible {
 
     public fun revoke_ownership<T: store>(cap: CollectionCap<T>, collection: &mut Collection<T>) {
         let collection_id = object::id(collection);
-        assert!(cap.collection == collection_id, errors::wrongCollection!());
+        cap.assert_correct_collection(collection_id);
+
         collection.config.owned = false;
         let CollectionCap<T> { id, .. } = cap;
         emit(RevokeOwnership {
@@ -542,6 +544,14 @@ module nft::collectible {
         collection.config.meta_borrowable
     }
 
+    public fun get_creator<T: store>(collection: &Collection<T>): String {
+        if (collection.creator.is_some()) {
+            *option::borrow(&collection.creator)
+        } else {
+            string::utf8(b"")
+        }
+    }
+
     // === Collectible ===
     public fun get_image_url<T: store>(collectible: &Collectible<T>): String {
         collectible.image_url
@@ -553,14 +563,6 @@ module nft::collectible {
 
     public fun get_description<T: store>(collectible: &Collectible<T>): String {
         collectible.description
-    }
-
-    public fun get_creator<T: store>(collection: &Collection<T>): String {
-        if (collection.creator.is_some()) {
-            *option::borrow(&collection.creator)
-        } else {
-            string::utf8(b"")
-        }
     }
 
     public fun get_attribute_map<T: store>(collectible: &Collectible<T>): VecMap<String, String> {
@@ -585,6 +587,7 @@ module nft::collectible {
             !dyn_field::exists_(&collectible.id, attribute.into_key()),
             errors::attributeTypeAlreadyExists!(),
         );
+
         attribute.emit_joined(object::id(collectible));
 
         collectible.equipped.insert(attribute.into_key(), object::id(&attribute));
@@ -608,5 +611,17 @@ module nft::collectible {
         attribute.emit_split(object::id(collectible));
 
         attribute
+    }
+
+    fun assert_correct_collection<T: store>(self: &CollectionCap<T>, id: ID) {
+        assert!(self.collection == id, errors::wrongCollection!());
+    }
+
+    fun assert_attribute_check<T: store>(self: &Collection<T>, key: &String) {
+        assert!(self.attribute_fields.contains(key), errors::attributeNotAllowed!());
+    }
+
+    fun assert_dynamic<T: store>(self: &Collection<T>) {
+        assert!(self.config.dynamic, errors::notDynamic!());
     }
 }
