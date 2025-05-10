@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 module nft::collectible {
-    use nft::{attributes::{Self, Attribute}, errors};
+    use nft::{attributes::{Self, Attribute}, errors, registry::Registry};
     use std::{hash::sha2_256, string::{Self, String}};
     use sui::{
         borrow::{Self, Referent, Borrow},
@@ -12,13 +12,6 @@ module nft::collectible {
         transfer_policy::{Self as policy, TransferPolicyCap},
         vec_map::{Self as map, VecMap}
     };
-
-    /// Centralized registry to provide access to system features of
-    /// the Collectible.
-    public struct Registry has key {
-        id: UID,
-        publisher: Publisher,
-    }
 
     public struct Meta_borrow {
         collectible_id: ID,
@@ -77,9 +70,6 @@ module nft::collectible {
         meta: Option<T>,
     }
 
-    /// OTW to initialize the Registry and the base type.
-    public struct COLLECTIBLE has drop {}
-
     // ===================== Events =====================
 
     public struct TicketClaimed has copy, drop {
@@ -122,15 +112,6 @@ module nft::collectible {
         item_id: ID,
         edit_name: String,
         edit_value: String,
-    }
-
-    /// Create the centralized Registry of Collectibles to provide access
-    /// to the Publisher functionality of the Collectible.
-    fun init(otw: COLLECTIBLE, ctx: &mut TxContext) {
-        transfer::share_object(Registry {
-            id: object::new(ctx),
-            publisher: package::claim(otw, ctx),
-        })
     }
 
     /// Called in the external module initializer. Sends a `CollectionTicket`
@@ -181,14 +162,17 @@ module nft::collectible {
         let CollectionTicket { id, publisher, max_supply } = ticket;
         object::delete(id);
 
-        let mut display_collectible = display::new<Collectible<T>>(&registry.publisher, ctx);
-        let display_attribute = display::new<Attribute<T>>(&registry.publisher, ctx);
+        let mut display_collectible = display::new<Collectible<T>>(
+            registry.borrow_publisher(),
+            ctx,
+        );
+        let display_attribute = display::new<Attribute<T>>(registry.borrow_publisher(), ctx);
         let (policy_collectible, policy_cap_collectible) = policy::new<Collectible<T>>(
-            &registry.publisher,
+            registry.borrow_publisher(),
             ctx,
         );
         let (policy_attribute, policy_cap_attribute) = policy::new<Attribute<T>>(
-            &registry.publisher,
+            registry.borrow_publisher(),
             ctx,
         );
 
@@ -624,11 +608,5 @@ module nft::collectible {
         attribute.emit_split(object::id(collectible));
 
         attribute
-    }
-
-    #[test_only]
-    public fun test_init(ctx: &mut TxContext) {
-        let otw = COLLECTIBLE {};
-        init(otw, ctx);
     }
 }

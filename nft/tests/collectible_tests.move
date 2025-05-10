@@ -2,14 +2,8 @@
 module nft::collectible_test {
     use nft::{
         attributes::Attribute,
-        collectible::{
-            Self as contract,
-            Registry,
-            CollectionTicket,
-            Collection,
-            CollectionCap,
-            Collectible
-        }
+        collectible::{Self as contract, CollectionTicket, Collection, CollectionCap, Collectible},
+        registry::{Self, Registry}
     };
     use std::{option::{some, none}, string::String};
     use sui::{
@@ -30,7 +24,7 @@ module nft::collectible_test {
 
     fun setup(dynamic: bool): (Scenario, Registry, Collection<Meta>, CollectionCap<Meta>) {
         let mut scenario = scenario::begin(Alice);
-        contract::test_init(scenario.ctx());
+        registry::test_init(scenario.ctx());
         scenario.next_tx(Alice);
 
         let registry = scenario.take_shared<Registry>();
