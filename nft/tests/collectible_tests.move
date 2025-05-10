@@ -114,7 +114,7 @@ module nft::collectible_test {
         );
         // std::debug::print(&collectible);
 
-        let map: VecMap<String, ID> = collectible.get_attribute_map();
+        let map: VecMap<String, ID> = collectible.get_equipped_map();
         // std::debug::print(&map);
         let keys: vector<String> = map.keys();
         // std::debug::print(&keys);
@@ -162,7 +162,7 @@ module nft::collectible_test {
             scen.ctx(),
         );
 
-        let vecmap_attributes: VecMap<String, ID> = collectible.get_attribute_map();
+        let vecmap_attributes: VecMap<String, ID> = collectible.get_equipped_map();
 
         let (keys, values) = vecmap_attributes.into_keys_values();
         assert_eq(keys[0], b"Background".to_string());
@@ -218,7 +218,7 @@ module nft::collectible_test {
 
         collectible.join_attribute(&mut collection, new_attribute, scen.ctx());
 
-        let vecmap_attribute: VecMap<String, ID> = collectible.get_attribute_map();
+        let vecmap_attribute: VecMap<String, ID> = collectible.get_equipped_map();
 
         let attribute_value: &ID = vecmap_attribute.get(&b"Background".to_string());
         assert!(attribute_value == &new_attribute_id, 10);

@@ -27,7 +27,7 @@ Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-fram
 # Override = { local = "../conflicting/version", override = true }
 
 [addresses]
-nft = "0x1018d8df359f0e7d104320eac96f6e5daac2c910932d4225e812e26e78c8d46e"
+nft = "0x0"
 # Registry = "0x39086e28cb44555d40f3c03dd0dec8a62d14e2446c876fbef206c1b0efcd31db"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:

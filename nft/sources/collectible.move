@@ -72,7 +72,8 @@ module nft::collectible {
         image_url: String,
         name: String,
         description: String,
-        attributes: VecMap<String, ID>,
+        equipped: VecMap<String, ID>,
+        attributes: VecMap<String, String>,
         meta: Option<T>,
     }
 
@@ -103,7 +104,8 @@ module nft::collectible {
         image_url: String,
         name: Option<String>,
         description: Option<String>,
-        attributes: VecMap<String, ID>,
+        attributes: VecMap<String, String>,
+        equipped: VecMap<String, ID>,
     }
 
     public struct RevokeOwnership has copy, drop {
@@ -267,7 +269,8 @@ module nft::collectible {
             image_url,
             name: name.destroy_with_default<String>(empty_string),
             description: description.destroy_with_default<String>(empty_string),
-            attributes: map::empty<String, ID>(),
+            attributes: map::empty<String, String>(),
+            equipped: map::empty<String, ID>(),
             meta,
         };
 
@@ -286,6 +289,7 @@ module nft::collectible {
             name,
             description,
             attributes: item.attributes,
+            equipped: item.equipped,
         });
 
         item
@@ -509,11 +513,12 @@ module nft::collectible {
     }
 
     public fun revoke_ownership<T: store>(cap: CollectionCap<T>, collection: &mut Collection<T>) {
-        assert!(cap.collection == object::id(collection), errors::wrongCollection!());
+        let collection_id = object::id(collection);
+        assert!(cap.collection == collection_id, errors::wrongCollection!());
         collection.config.owned = false;
         let CollectionCap<T> { id, .. } = cap;
         emit(RevokeOwnership {
-            collection_id: object::id(collection),
+            collection_id: collection_id,
             collection_cap_id: id.to_inner(),
         });
         id.delete();
@@ -529,10 +534,6 @@ module nft::collectible {
         collection.config.minted
     }
 
-    public fun get_burned<T: store>(collection: &Collection<T>): (bool, u32) {
-        (collection.config.burnable, collection.config.burned)
-    }
-
     public fun get_banner_url<T: store>(collection: &Collection<T>): String {
         collection.banner_url
     }
@@ -541,12 +542,16 @@ module nft::collectible {
         collection.attribute_fields
     }
 
-    public fun is_dynamic<T: store>(collection: &Collection<T>): bool {
-        collection.config.dynamic
-    }
-
     public fun get_collection_id_by_cap<T: store>(cap: &CollectionCap<T>): ID {
         cap.collection
+    }
+
+    public fun get_burned<T: store>(collection: &Collection<T>): (bool, u32) {
+        (collection.config.burnable, collection.config.burned)
+    }
+
+    public fun is_dynamic<T: store>(collection: &Collection<T>): bool {
+        collection.config.dynamic
     }
 
     public fun is_meta_borrowable<T: store>(collection: &Collection<T>): bool {
@@ -574,8 +579,12 @@ module nft::collectible {
         }
     }
 
-    public fun get_attribute_map<T: store>(collectible: &Collectible<T>): VecMap<String, ID> {
+    public fun get_attribute_map<T: store>(collectible: &Collectible<T>): VecMap<String, String> {
         collectible.attributes
+    }
+
+    public fun get_equipped_map<T: store>(collectible: &Collectible<T>): VecMap<String, ID> {
+        collectible.equipped
     }
 
     // ================= Internal =======================
@@ -594,10 +603,9 @@ module nft::collectible {
         );
         attribute.emit_joined(object::id(collectible));
 
-        let mut attribute_map: VecMap<String, ID> = collectible.attributes;
-        attribute_map.insert(attribute.into_key(), object::id(&attribute));
+        collectible.equipped.insert(attribute.into_key(), object::id(&attribute));
+        collectible.attributes.insert(attribute.into_key(), attribute.into_value());
 
-        collectible.attributes = attribute_map;
         dyn_field::add(&mut collectible.id, attribute.into_key(), attribute);
     }
 
@@ -609,10 +617,9 @@ module nft::collectible {
         assert!(collection.attribute_fields.contains(&key), errors::attributeNotAllowed!());
         assert!(dyn_field::exists_(&collectible.id, key), errors::attributeTypeAlreadyExists!());
 
-        let mut attribute_map: VecMap<String, ID> = collectible.attributes;
-        let (_key_string, _id_value) = attribute_map.remove(&key);
+        collectible.attributes.remove(&key);
+        collectible.equipped.remove(&key);
 
-        collectible.attributes = attribute_map;
         let attribute: Attribute<T> = dyn_field::remove(&mut collectible.id, key);
         attribute.emit_split(object::id(collectible));
 
