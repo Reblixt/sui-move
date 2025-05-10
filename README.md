@@ -25,6 +25,7 @@ The collectible standard implements a flexible and extensible framework for NFTs
 - **Dynamic Attributes**: Join and split attributes from collectibles
 - **Flexible Supply**: Optional maximum supply limits
 - **Transfer Policy Integration**: Built-in marketplace compliance
+- **Standardize Display**: Customizable display objects for collectibles
 - **Custom Metadata**: Support for project-specific metadata types
 - **Attribute Validation**: Verify attribute combinations through hashing
 - **Comprehensive Events**: Full event system for off-chain indexing
@@ -70,7 +71,8 @@ public struct Collectible<T: store> has key, store {
     image_url: String,
     name: Option<String>,
     description: Option<String>,
-    attributes: Option<VecMap<String, ID>>,
+    equipped: VecMap<String, ID>,
+    attributes: Option<VecMap<String, String>>,
     meta: Option<T>,
 }
 ```
@@ -80,11 +82,13 @@ The NFT objects that can have modular attributes attached.
 ### Attribute
 
 ```move
-public struct Attribute<phantom T> has key, store {
+public struct Attribute<T> has key, store {
     id: UID,
     image_url: Option<String>,
-    key: String,
-    value: String,
+    key: String, // Background, Cloth, etc.
+    value: String, // red-sky, jacket, etc.
+    meta: Option<T>,
+    meta_borrowable: bool,
 }
 ```
 

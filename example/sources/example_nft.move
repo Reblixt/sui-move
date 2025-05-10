@@ -1,23 +1,13 @@
 module example::nft_example {
-    use nft::collectible::{
-        Self,
-        CollectionCap,
-        CollectionTicket,
-        Registry,
-        Collection,
-        Collectible
-    };
-    use std::{option::{Self, some}, string::{String, utf8}};
-    use sui::{borrow::Borrow, display::Display};
-
-    // use sui::{borrow::Borrow, display::{Self, Display}};
-
-    // use sui::package::{Self, Publisher};
+    use nft::{collectible::{Self, CollectionCap, CollectionTicket, Collection}, registry::Registry};
+    use std::{option::{none, some}, string::String};
 
     public struct NFT_EXAMPLE has drop {}
 
     public struct Nft<phantom T> has key, store {
         id: UID,
+        name: String,
+        cool: bool,
     }
 
     fun init(otw: NFT_EXAMPLE, ctx: &mut TxContext) {
@@ -28,13 +18,6 @@ module example::nft_example {
     public fun collection_init(
         ticket: CollectionTicket<Nft<NFT_EXAMPLE>>,
         registry: &Registry,
-        // name: String,
-        banner_url: String,
-        // image_url: String,
-        // description: String,
-        keys: vector<String>,
-        // values: vector<String>,
-        // creator: String,
         ctx: &mut TxContext,
     ) {
         let (mut collection, cap): (
@@ -42,10 +25,11 @@ module example::nft_example {
             CollectionCap<Nft<NFT_EXAMPLE>>,
         ) = ticket.create_collection(
             registry,
-            banner_url,
-            keys,
-            some(b"carl".to_string()),
+            b"https://www.banner.com".to_string(),
+            vector[b"Background".to_string(), b"Clothing".to_string()],
+            some(b"Reblixt is the Creator".to_string()),
             false,
+            true,
             true,
             ctx,
         );
@@ -59,6 +43,45 @@ module example::nft_example {
 
         transfer::public_transfer(collection, ctx.sender());
         transfer::public_transfer(cap, ctx.sender());
+    }
+
+    #[allow(lint(self_transfer))]
+    public fun mint(
+        collection: &mut Collection<Nft<NFT_EXAMPLE>>,
+        cap: &CollectionCap<Nft<NFT_EXAMPLE>>,
+        ctx: &mut TxContext,
+    ) {
+        // The image_url is optional use `some` to pass it or `none to skip it
+        let image_url = b"www.image.com".to_string();
+        let key = b"Background".to_string();
+        let value = b"Red".to_string();
+        // Meta is optional use `some` to pass it or `none` to skip it
+        let meta = Nft<NFT_EXAMPLE> {
+            id: object::new(ctx),
+            name: b"NFT".to_string(),
+            cool: true,
+        };
+
+        // Here you can create a loop to create multiple attributes
+        let attribute = collection.mint_attribute(
+            cap,
+            some(image_url),
+            key,
+            value,
+            some(meta),
+            ctx,
+        );
+
+        let nft = collection.mint(
+            cap,
+            some(b"Test_name".to_string()),
+            b"https://www.image.com".to_string(),
+            some(b"Test_description".to_string()),
+            some(vector[attribute]),
+            none(),
+            ctx,
+        );
+        transfer::public_transfer(nft, ctx.sender())
     }
 
     #[test_only]
